@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Wishlist | Smart Movies</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="wishlist-body">
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="logo">SM</div>
+      <span class="brand-text">Smart Movies</span>
+    </div>
+
+    <nav class="nav-links wishlist-nav">
+      <a href="index.html">Home</a>
+      <a href="wishlist.html" class="active-link">Wishlist</a>
+    </nav>
+  </header>
+
+  <main class="wishlist-full-page">
+    <section class="wishlist-hero">
+      <div>
+        <span class="search-eyebrow">Saved Movies</span>
+        <h1>My Wishlist</h1>
+        <p>All movies you saved with the plus button are collected here.</p>
+      </div>
+
+      <div class="wishlist-actions">
+        <span id="wishlistPageCount">0 saved</span>
+        <button class="clear-wishlist-btn" id="clearWishlistBtn" type="button">Clear All</button>
+      </div>
+    </section>
+
+    <section class="wishlist-page-grid" id="wishlistPageGrid">
+      <div class="empty-state">No movies saved yet.</div>
+    </section>
+  </main>
+
+  <script src="wishlist.js"></script>
+</body>
+</html>
