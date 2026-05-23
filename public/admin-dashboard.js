@@ -13,6 +13,12 @@ const posterInput = document.getElementById("posterInput");
 const descriptionInput = document.getElementById("descriptionInput");
 const newMovieBtn = document.getElementById("newMovieBtn");
 const resetFormBtn = document.getElementById("resetFormBtn");
+const adminFeedbackList = document.getElementById("adminFeedbackList");
+
+if (localStorage.getItem("smartAdminVerified") !== "true") {
+  alert("Please verify admin access first.");
+  window.location.href = "login.html";
+}
 
 const fallbackPosters = [
   "images/inception.jpg",
@@ -165,6 +171,30 @@ function renderMovies(totalOverride) {
   }).join("");
 }
 
+function renderAdminFeedback() {
+  if (!adminFeedbackList) return;
+
+  let feedback = [];
+  try {
+    feedback = JSON.parse(localStorage.getItem("smartFeedback") || "[]");
+  } catch (error) {
+    feedback = [];
+  }
+
+  if (!feedback.length) {
+    adminFeedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
+    return;
+  }
+
+  adminFeedbackList.innerHTML = feedback.map(item => `
+    <div class="feedback-item">
+      <strong>${escapeHtml(item.type)}</strong>
+      <p>${escapeHtml(item.message)}</p>
+      <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date || "")}</span>
+    </div>
+  `).join("");
+}
+
 async function saveMovie(record) {
   if (!serverMode) {
     const existingIndex = movies.findIndex(movie => String(movie.id) === String(record.id));
@@ -269,3 +299,4 @@ newMovieBtn.addEventListener("click", resetForm);
 resetFormBtn.addEventListener("click", resetForm);
 
 fetchMovies();
+renderAdminFeedback();

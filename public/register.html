@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register | Smart Movies</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body class="auth-body">
+  <header class="navbar auth-navbar">
+    <div class="nav-brand">
+      <div class="logo">SM</div>
+      <span class="brand-text">Smart Movies</span>
+    </div>
+
+    <nav class="nav-links wishlist-nav">
+      <a href="index.html">Home</a>
+      <a href="login.html">Login</a>
+      <a href="admin-dashboard.html">Admin</a>
+    </nav>
+  </header>
+
+  <main class="auth-shell register-shell">
+    <section class="auth-visual">
+      <span class="search-eyebrow">Join Smart Movies</span>
+      <h1>Create your movie profile.</h1>
+      <p>Save favorites, manage your wishlist, and personalize your recommendations.</p>
+
+      <div class="auth-feature-list">
+        <div>
+          <strong>Wishlist</strong>
+          <span>Save posters with one click.</span>
+        </div>
+        <div>
+          <strong>AI Assistant</strong>
+          <span>Ask for mood-based suggestions.</span>
+        </div>
+        <div>
+          <strong>Profile</strong>
+          <span>Keep your movie account details.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="auth-card">
+      <div class="auth-card-head">
+        <h2>Register</h2>
+        <p>Fill in your details to create an account.</p>
+      </div>
+
+      <form id="registerForm" class="auth-form">
+        <div class="auth-two-col">
+          <label>
+            First Name
+            <input type="text" id="registerFirstName" placeholder="First name" required />
+          </label>
+          <label>
+            Last Name
+            <input type="text" id="registerLastName" placeholder="Last name" />
+          </label>
+        </div>
+
+        <label>
+          Email
+          <input type="email" id="registerEmail" placeholder="you@example.com" required />
+        </label>
+
+        <label>
+          Contact Number
+          <input type="text" id="registerContact" placeholder="Phone number" />
+        </label>
+
+        <label>
+          Address
+          <input type="text" id="registerAddress" placeholder="Address" />
+        </label>
+
+        <div class="auth-two-col">
+          <label>
+            City
+            <input type="text" id="registerCity" placeholder="City" />
+          </label>
+          <label>
+            State
+            <input type="text" id="registerState" placeholder="State" />
+          </label>
+        </div>
+
+        <label>
+          Password
+          <input type="password" id="registerPassword" placeholder="Create password" required />
+        </label>
+
+        <button class="auth-submit" type="submit">Create Account</button>
+        <p class="auth-message" id="authMessage"></p>
+        <p class="auth-bottom">Already have an account? <a href="login.html">Login</a></p>
+      </form>
+    </section>
+  </main>
+
+  <script src="auth.js"></script>
+</body>
+</html>

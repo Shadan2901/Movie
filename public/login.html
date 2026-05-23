@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | Smart Movies</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body class="auth-body">
+  <header class="navbar auth-navbar">
+    <div class="nav-brand">
+      <div class="logo">SM</div>
+      <span class="brand-text">Smart Movies</span>
+    </div>
+
+    <nav class="nav-links wishlist-nav">
+      <a href="index.html">Home</a>
+      <a href="wishlist.html">Wishlist</a>
+      <a href="admin-dashboard.html">Admin</a>
+    </nav>
+  </header>
+
+  <main class="auth-shell">
+    <section class="auth-visual">
+      <span class="search-eyebrow">Welcome Back</span>
+      <h1>Sign in to continue your movie night.</h1>
+      <p>Keep your profile, wishlist, and recommendations ready whenever you return.</p>
+
+      <div class="auth-poster-stack" aria-hidden="true">
+        <img src="images/Spiderman.webp" alt="" class="auth-poster main" />
+        <img src="images/Doomsday.jpg" alt="" class="auth-poster side top" />
+        <img src="images/Avengers.webp" alt="" class="auth-poster side bottom" />
+      </div>
+    </section>
+
+    <section class="auth-card">
+      <div class="auth-card-head">
+        <h2>Login</h2>
+        <p>Use your registered email and password.</p>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <label>
+          Email
+          <input type="email" id="loginEmail" placeholder="you@example.com" required />
+        </label>
+
+        <label>
+          Password
+          <input type="password" id="loginPassword" placeholder="Enter password" required />
+        </label>
+
+        <div class="auth-options">
+          <label class="auth-check">
+            <input type="checkbox" id="rememberInput" checked />
+            Remember me
+          </label>
+          <a href="register.html">Create account</a>
+        </div>
+
+        <button class="auth-submit" type="submit">Sign In</button>
+        <p class="auth-message" id="authMessage"></p>
+      </form>
+    </section>
+  </main>
+
+  <script src="auth.js"></script>
+</body>
+</html>

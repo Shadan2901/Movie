@@ -34,8 +34,22 @@ const passwordInput = document.getElementById("passwordInput");
 
 const profileAvatar = document.getElementById("profileAvatar");
 const profilePreviewAvatar = document.getElementById("profilePreviewAvatar");
+const settingsTitle = document.getElementById("settingsTitle");
+const settingsItems = document.querySelectorAll(".settings-item");
+const settingsPanels = document.querySelectorAll(".settings-panel");
+const profileImageInput = document.getElementById("profileImageInput");
+const languageInputs = document.querySelectorAll("input[name='language']");
+const languagePreview = document.getElementById("languagePreview");
+const feedbackTypeInput = document.getElementById("feedbackTypeInput");
+const feedbackMessageInput = document.getElementById("feedbackMessageInput");
+const feedbackList = document.getElementById("feedbackList");
+const adminEmailInput = document.getElementById("adminEmailInput");
+const adminPasswordInput = document.getElementById("adminPasswordInput");
 
 let currentUser = null;
+let currentSettingsTab = "profile";
+let pendingProfilePhoto = "";
+let originalProfileEmail = "";
 let currentPage = 1;
 let currentSearch = "";
 let totalPagesGlobal = 1;
@@ -51,6 +65,19 @@ const posterFallbacks = [
   "images/Hangover.jpg",
   "images/about.jpg"
 ];
+const languageNames = {
+  en: "English",
+  ms: "Bahasa Melayu",
+  zh: "Chinese",
+  ta: "Tamil"
+};
+const settingsTitles = {
+  profile: "Edit profile",
+  language: "Language",
+  feedback: "Feedback",
+  admin: "Admin verification",
+  help: "Help"
+};
 
 function addMessage(text, sender) {
   const msg = document.createElement("div");
@@ -80,27 +107,127 @@ function getAvatarLetter() {
   return getDisplayName().charAt(0).toUpperCase();
 }
 
+function applyAvatar(element, letter, photo) {
+  if (!element) return;
+
+  if (photo) {
+    element.textContent = "";
+    element.style.backgroundImage = `url("${photo}")`;
+    element.style.backgroundSize = "cover";
+    element.style.backgroundPosition = "center";
+  } else {
+    element.textContent = letter;
+    element.style.backgroundImage = "";
+  }
+}
+
+function getUsers() {
+  try {
+    return JSON.parse(localStorage.getItem("smartMovieUsers") || "[]");
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveCurrentUser(previousEmail = "") {
+  if (!currentUser) return;
+
+  localStorage.setItem("smartCurrentUser", JSON.stringify(currentUser));
+
+  const users = getUsers();
+  const userIndex = users.findIndex(user => user.email === (previousEmail || currentUser.email));
+  if (userIndex >= 0) {
+    users[userIndex] = { ...users[userIndex], ...currentUser };
+    localStorage.setItem("smartMovieUsers", JSON.stringify(users));
+  }
+}
+
 function updateAuthUI() {
+  if (!currentUser) {
+    try {
+      currentUser = JSON.parse(localStorage.getItem("smartCurrentUser") || "null");
+    } catch (error) {
+      currentUser = null;
+    }
+  }
+
   if (currentUser) {
     welcomeText.textContent = getDisplayName();
-    profileAvatar.textContent = getAvatarLetter();
-    profilePreviewAvatar.textContent = getAvatarLetter();
+    applyAvatar(profileAvatar, getAvatarLetter(), currentUser.photo);
+    applyAvatar(profilePreviewAvatar, getAvatarLetter(), currentUser.photo);
     loginBtn.style.display = "none";
     logoutBtn.style.display = "block";
     editProfileBtn.style.display = "block";
   } else {
     welcomeText.textContent = "Guest";
-    profileAvatar.textContent = "G";
-    profilePreviewAvatar.textContent = "G";
+    applyAvatar(profileAvatar, "G", "");
+    applyAvatar(profilePreviewAvatar, "G", "");
     loginBtn.style.display = "block";
     logoutBtn.style.display = "none";
     editProfileBtn.style.display = "none";
   }
 }
 
+function getSelectedLanguage() {
+  const selected = Array.from(languageInputs).find(inputItem => inputItem.checked);
+  return selected ? selected.value : "en";
+}
+
+function updateLanguagePreview(language) {
+  const selectedLanguage = language || getSelectedLanguage();
+  languagePreview.textContent = `Language selected: ${languageNames[selectedLanguage] || "English"}`;
+}
+
+function renderFeedbackList() {
+  let feedback = [];
+
+  try {
+    feedback = JSON.parse(localStorage.getItem("smartFeedback") || "[]");
+  } catch (error) {
+    feedback = [];
+  }
+
+  if (!feedback.length) {
+    feedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
+    return;
+  }
+
+  feedbackList.innerHTML = feedback.slice(0, 4).map(item => `
+    <div class="feedback-item">
+      <strong>${escapeHtml(item.type)}</strong>
+      <p>${escapeHtml(item.message)}</p>
+      <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date)}</span>
+    </div>
+  `).join("");
+}
+
+function switchSettingsTab(tab) {
+  currentSettingsTab = tab;
+  settingsTitle.textContent = settingsTitles[tab] || "Settings";
+
+  settingsItems.forEach(item => {
+    item.classList.toggle("active", item.dataset.settingsTab === tab);
+  });
+
+  settingsPanels.forEach(panel => {
+    const panelTab = panel.id.replace("settingsPanel", "").toLowerCase();
+    panel.classList.toggle("active", panelTab === tab);
+  });
+
+  saveProfileBtn.style.display = tab === "help" ? "none" : "inline-flex";
+  cancelProfileBtn.textContent = tab === "help" ? "Close" : "Cancel";
+
+  if (tab === "profile") saveProfileBtn.textContent = "Save";
+  if (tab === "language") saveProfileBtn.textContent = "Save Language";
+  if (tab === "feedback") saveProfileBtn.textContent = "Submit Feedback";
+  if (tab === "admin") saveProfileBtn.textContent = "Verify Admin";
+  if (tab === "feedback") renderFeedbackList();
+}
+
 function openProfileModal() {
   if (!currentUser) return;
 
+  switchSettingsTab("profile");
   firstNameInput.value = currentUser.firstName || "";
   lastNameInput.value = currentUser.lastName || "";
   emailInput.value = currentUser.email || "";
@@ -109,8 +236,16 @@ function openProfileModal() {
   cityInput.value = currentUser.city || "";
   stateInput.value = currentUser.state || "";
   passwordInput.value = currentUser.password || "";
+  pendingProfilePhoto = currentUser.photo || "";
+  originalProfileEmail = currentUser.email || "";
 
-  profilePreviewAvatar.textContent = getAvatarLetter();
+  const savedLanguage = currentUser.language || localStorage.getItem("smartLanguage") || "en";
+  languageInputs.forEach(inputItem => {
+    inputItem.checked = inputItem.value === savedLanguage;
+  });
+  updateLanguagePreview(savedLanguage);
+  renderFeedbackList();
+  applyAvatar(profilePreviewAvatar, getAvatarLetter(), pendingProfilePhoto);
   profileModal.classList.add("show");
 }
 
@@ -134,30 +269,14 @@ document.addEventListener("click", function (event) {
 });
 
 loginBtn.addEventListener("click", function () {
-  const username = prompt("Enter your username:");
-  if (username && username.trim() !== "") {
-    const cleanName = username.trim();
-
-    currentUser = {
-      firstName: cleanName,
-      lastName: "",
-      email: "",
-      address: "",
-      contact: "",
-      city: "",
-      state: "",
-      password: ""
-    };
-
-    updateAuthUI();
-    profileDropdown.classList.remove("show");
-    addMessage(`User <b>${getDisplayName()}</b> has logged in.`, "bot");
-  }
+  window.location.href = "login.html";
 });
 
 logoutBtn.addEventListener("click", function () {
   addMessage(`User <b>${getDisplayName()}</b> has logged out.`, "bot");
   currentUser = null;
+  localStorage.removeItem("smartCurrentUser");
+  localStorage.removeItem("smartAdminVerified");
   updateAuthUI();
   profileDropdown.classList.remove("show");
 });
@@ -170,21 +289,96 @@ editProfileBtn.addEventListener("click", function () {
 closeProfileModal.addEventListener("click", closeProfileEditor);
 cancelProfileBtn.addEventListener("click", closeProfileEditor);
 
+settingsItems.forEach(item => {
+  item.addEventListener("click", function () {
+    switchSettingsTab(item.dataset.settingsTab);
+  });
+});
+
+languageInputs.forEach(inputItem => {
+  inputItem.addEventListener("change", function () {
+    updateLanguagePreview(inputItem.value);
+  });
+});
+
+profileImageInput.addEventListener("change", function () {
+  const file = profileImageInput.files && profileImageInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.addEventListener("load", function () {
+    pendingProfilePhoto = reader.result;
+    applyAvatar(profilePreviewAvatar, getAvatarLetter(), pendingProfilePhoto);
+  });
+  reader.readAsDataURL(file);
+});
+
 saveProfileBtn.addEventListener("click", function () {
-  if (!currentUser) return;
+  if (!currentUser && currentSettingsTab !== "admin") return;
 
-  currentUser.firstName = firstNameInput.value.trim();
-  currentUser.lastName = lastNameInput.value.trim();
-  currentUser.email = emailInput.value.trim();
-  currentUser.address = addressInput.value.trim();
-  currentUser.contact = contactInput.value.trim();
-  currentUser.city = cityInput.value.trim();
-  currentUser.state = stateInput.value.trim();
-  currentUser.password = passwordInput.value;
+  if (currentSettingsTab === "profile") {
+    currentUser.firstName = firstNameInput.value.trim();
+    currentUser.lastName = lastNameInput.value.trim();
+    currentUser.email = emailInput.value.trim();
+    currentUser.address = addressInput.value.trim();
+    currentUser.contact = contactInput.value.trim();
+    currentUser.city = cityInput.value.trim();
+    currentUser.state = stateInput.value.trim();
+    currentUser.password = passwordInput.value;
+    currentUser.photo = pendingProfilePhoto;
 
-  updateAuthUI();
-  closeProfileEditor();
-  addMessage("Profile updated successfully.", "bot");
+    saveCurrentUser(originalProfileEmail);
+    updateAuthUI();
+    closeProfileEditor();
+    addMessage("Profile updated successfully.", "bot");
+    return;
+  }
+
+  if (currentSettingsTab === "language") {
+    const selectedLanguage = getSelectedLanguage();
+    currentUser.language = selectedLanguage;
+    localStorage.setItem("smartLanguage", selectedLanguage);
+    saveCurrentUser();
+    updateLanguagePreview(selectedLanguage);
+    addMessage(`Language saved: ${languageNames[selectedLanguage] || "English"}.`, "bot");
+    return;
+  }
+
+  if (currentSettingsTab === "feedback") {
+    const message = feedbackMessageInput.value.trim();
+    if (!message) {
+      addMessage("Please write your feedback before submitting.", "bot");
+      return;
+    }
+
+    const feedback = JSON.parse(localStorage.getItem("smartFeedback") || "[]");
+    feedback.unshift({
+      type: feedbackTypeInput.value,
+      message,
+      user: currentUser.email || getDisplayName(),
+      date: new Date().toLocaleString()
+    });
+
+    localStorage.setItem("smartFeedback", JSON.stringify(feedback));
+    feedbackMessageInput.value = "";
+    renderFeedbackList();
+    addMessage("Thank you. Your feedback has been submitted.", "bot");
+    return;
+  }
+
+  if (currentSettingsTab === "admin") {
+    const email = adminEmailInput.value.trim().toLowerCase();
+    const password = adminPasswordInput.value;
+    const isAdmin = email === "admin@smartmovies.com" && password === "admin123";
+
+    if (!isAdmin) {
+      addMessage("Admin verification failed. Please check the admin email and password.", "bot");
+      return;
+    }
+
+    localStorage.setItem("smartAdminVerified", "true");
+    window.location.href = "admin-dashboard.html";
+  }
 });
 
 function escapeHtml(value) {
