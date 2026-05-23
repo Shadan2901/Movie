@@ -22,6 +22,24 @@ if (fs.existsSync(moviesPath)) {
 
 console.log("TOTAL MOVIES LOADED:", movies.length);
 
+function saveMovies() {
+  fs.writeFileSync(moviesPath, JSON.stringify(movies, null, 2), "utf-8");
+}
+
+function normalizeMovie(payload, existingMovie = {}) {
+  return {
+    ...existingMovie,
+    id: payload.id || existingMovie.id || `admin-${Date.now()}`,
+    title: String(payload.title || "").trim(),
+    year: String(payload.year || "").trim(),
+    rating: String(payload.rating || "N/A").trim(),
+    genre_ids: Array.isArray(payload.genre_ids) ? payload.genre_ids : (existingMovie.genre_ids || []),
+    poster: String(payload.poster || "").trim(),
+    description: String(payload.description || "").trim(),
+    popularity: Number(payload.popularity || existingMovie.popularity || 0)
+  };
+}
+
 function isTargetYear(movie) {
   const year = Number(movie.year);
   return year >= 2004 && year <= 2026;
@@ -120,6 +138,77 @@ app.get("/api/movies", (req, res) => {
     currentPage: page,
     movies: paginatedMovies
   });
+});
+
+app.get("/api/admin/movies", (req, res) => {
+  const search = (req.query.search || "").toLowerCase().trim();
+
+  let filteredMovies = [...movies].sort((a, b) => {
+    if (Number(b.year) !== Number(a.year)) {
+      return Number(b.year) - Number(a.year);
+    }
+    return (b.popularity || 0) - (a.popularity || 0);
+  });
+
+  if (search) {
+    filteredMovies = filteredMovies.filter(movie =>
+      (movie.title || "").toLowerCase().includes(search) ||
+      (movie.description || "").toLowerCase().includes(search) ||
+      String(movie.year || "").toLowerCase().includes(search) ||
+      String(movie.rating || "").toLowerCase().includes(search)
+    );
+  }
+
+  res.json({
+    total: filteredMovies.length,
+    movies: filteredMovies.slice(0, 250)
+  });
+});
+
+app.post("/api/admin/movies", (req, res) => {
+  const movie = normalizeMovie(req.body || {});
+
+  if (!movie.title || !movie.year) {
+    return res.status(400).json({ error: "Title and year are required." });
+  }
+
+  movies.unshift(movie);
+  saveMovies();
+
+  res.status(201).json({ movie });
+});
+
+app.put("/api/admin/movies/:id", (req, res) => {
+  const id = String(req.params.id);
+  const index = movies.findIndex(movie => String(movie.id) === id);
+
+  if (index === -1) {
+    return res.status(404).json({ error: "Movie not found." });
+  }
+
+  const movie = normalizeMovie({ ...req.body, id: movies[index].id }, movies[index]);
+
+  if (!movie.title || !movie.year) {
+    return res.status(400).json({ error: "Title and year are required." });
+  }
+
+  movies[index] = movie;
+  saveMovies();
+
+  res.json({ movie });
+});
+
+app.delete("/api/admin/movies/:id", (req, res) => {
+  const id = String(req.params.id);
+  const beforeCount = movies.length;
+  movies = movies.filter(movie => String(movie.id) !== id);
+
+  if (movies.length === beforeCount) {
+    return res.status(404).json({ error: "Movie not found." });
+  }
+
+  saveMovies();
+  res.json({ ok: true });
 });
 
 app.get("/api/health", async (req, res) => {
