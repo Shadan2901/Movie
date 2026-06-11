@@ -27,6 +27,11 @@ function getPoster(item, index) {
   return item.poster || posterFallbacks[index % posterFallbacks.length];
 }
 
+function getTrailerUrl(item) {
+  const query = `${item.title || "movie"} ${item.year || ""} official trailer`.trim();
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+}
+
 function loadWishlist() {
   try {
     return JSON.parse(localStorage.getItem("movieWishlist") || "[]");
@@ -60,11 +65,16 @@ function renderWishlistPage() {
     const poster = escapeHtml(getPoster(movie, index));
     const fallback = escapeHtml(posterFallbacks[index % posterFallbacks.length]);
     const key = escapeHtml(getMovieKey(movie));
+    const trailerUrl = escapeHtml(getTrailerUrl(movie));
+    const trailerTitle = escapeHtml(movie.title || "Movie");
+    const trailerYear = escapeHtml(movie.year || "");
 
     return `
       <article class="wishlist-page-card">
         <div class="wishlist-page-poster">
-          <img src="${poster}" alt="${title}" onerror="this.onerror=null; this.src='${fallback}';">
+          <a class="wishlist-page-poster-link" href="${trailerUrl}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
+            <img src="${poster}" alt="${title}" onerror="this.onerror=null; this.src='${fallback}';">
+          </a>
         </div>
         <div class="wishlist-page-info">
           <div class="wishlist-page-meta">

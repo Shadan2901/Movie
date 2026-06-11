@@ -55,6 +55,27 @@
           placeholder="Search by title, year, genre, or keyword..."
         />
       </div>
+
+      <div class="top-filter-bar" aria-label="Movie filters">
+        <select id="genreFilter" class="top-filter-select" aria-label="Filter by genre">
+          <option value="">All genres</option>
+        </select>
+
+        <select id="yearFilter" class="top-filter-select" aria-label="Filter by year">
+          <option value="">All years</option>
+        </select>
+
+        <select id="sortFilter" class="top-filter-select" aria-label="Sort movies">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="az">A-Z</option>
+          <option value="za">Z-A</option>
+          <option value="rating">Highest rating</option>
+          <option value="popular">Most popular</option>
+        </select>
+
+        <button id="resetFiltersBtn" class="reset-filters-btn" type="button">Reset</button>
+      </div>
     </div>
   </section>
 
@@ -303,8 +324,8 @@
     </div>
   </div>
 
+  <script src="trailer.js"></script>
   <script src="movieData.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
-

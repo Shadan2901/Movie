@@ -16,6 +16,28 @@ const OLLAMA_MODEL = "gemma3";
 const moviesPath = path.join(__dirname, "data", "movies.json");
 let movies = [];
 
+const GENRE_NAMES = {
+  12: "Adventure",
+  14: "Fantasy",
+  16: "Animation",
+  18: "Drama",
+  27: "Horror",
+  28: "Action",
+  35: "Comedy",
+  36: "History",
+  37: "Western",
+  53: "Thriller",
+  80: "Crime",
+  99: "Documentary",
+  878: "Science Fiction",
+  9648: "Mystery",
+  10402: "Music",
+  10749: "Romance",
+  10751: "Family",
+  10752: "War",
+  10770: "TV Movie"
+};
+
 if (fs.existsSync(moviesPath)) {
   movies = JSON.parse(fs.readFileSync(moviesPath, "utf-8"));
 }
@@ -43,6 +65,44 @@ function normalizeMovie(payload, existingMovie = {}) {
 function isTargetYear(movie) {
   const year = Number(movie.year);
   return year >= 2004 && year <= 2026;
+}
+
+function getGenreNames(movie) {
+  return (movie.genre_ids || [])
+    .map(id => GENRE_NAMES[id])
+    .filter(Boolean);
+}
+
+function sortMoviesByOption(items, sortOption) {
+  return items.sort((a, b) => {
+    if (sortOption === "oldest") {
+      if (Number(a.year) !== Number(b.year)) return Number(a.year) - Number(b.year);
+      return (b.popularity || 0) - (a.popularity || 0);
+    }
+
+    if (sortOption === "az") {
+      return String(a.title || "").localeCompare(String(b.title || ""));
+    }
+
+    if (sortOption === "za") {
+      return String(b.title || "").localeCompare(String(a.title || ""));
+    }
+
+    if (sortOption === "rating") {
+      if (Number(b.rating || 0) !== Number(a.rating || 0)) return Number(b.rating || 0) - Number(a.rating || 0);
+      return (b.popularity || 0) - (a.popularity || 0);
+    }
+
+    if (sortOption === "popular") {
+      if ((b.popularity || 0) !== (a.popularity || 0)) return (b.popularity || 0) - (a.popularity || 0);
+      return Number(b.year) - Number(a.year);
+    }
+
+    if (Number(b.year) !== Number(a.year)) {
+      return Number(b.year) - Number(a.year);
+    }
+    return (b.popularity || 0) - (a.popularity || 0);
+  });
 }
 
 function getCandidateMovies(promptText) {
@@ -109,23 +169,33 @@ app.get("/api/movies", (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 12;
   const search = (req.query.search || "").toLowerCase().trim();
+  const genre = String(req.query.genre || "").trim();
+  const year = String(req.query.year || "").trim();
+  const sort = String(req.query.sort || "newest").trim();
 
   let filteredMovies = [...movies]
-    .filter(isTargetYear)
-    .sort((a, b) => {
-      if (Number(b.year) !== Number(a.year)) {
-        return Number(b.year) - Number(a.year);
-      }
-      return (b.popularity || 0) - (a.popularity || 0);
-    });
+    .filter(isTargetYear);
 
   if (search) {
     filteredMovies = filteredMovies.filter(movie =>
       (movie.title || "").toLowerCase().includes(search) ||
       (movie.description || "").toLowerCase().includes(search) ||
-      String(movie.year || "").toLowerCase().includes(search)
+      String(movie.year || "").toLowerCase().includes(search) ||
+      getGenreNames(movie).join(" ").toLowerCase().includes(search)
     );
   }
+
+  if (genre) {
+    filteredMovies = filteredMovies.filter(movie =>
+      (movie.genre_ids || []).map(String).includes(genre)
+    );
+  }
+
+  if (year) {
+    filteredMovies = filteredMovies.filter(movie => String(movie.year || "") === year);
+  }
+
+  sortMoviesByOption(filteredMovies, sort);
 
   const total = filteredMovies.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -225,6 +295,50 @@ app.get("/api/health", async (req, res) => {
       ok: false,
       error: "Ollama is not running."
     });
+  }
+});
+
+app.get("/api/trailer", async (req, res) => {
+  try {
+    const title = String(req.query.title || "").trim();
+    const year = String(req.query.year || "").trim();
+
+    if (!title) {
+      return res.status(400).json({ error: "Movie title is required." });
+    }
+
+    const query = `${title} ${year} official trailer`.trim();
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    const response = await fetch(searchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.9"
+      }
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ error: "Could not search YouTube for a trailer." });
+    }
+
+    const html = await response.text();
+    const videoIds = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)]
+      .map(match => match[1])
+      .filter((videoId, index, list) => list.indexOf(videoId) === index);
+
+    const videoId = videoIds[0];
+
+    if (!videoId) {
+      return res.status(404).json({ error: "No trailer video found.", searchUrl });
+    }
+
+    res.json({
+      videoId,
+      searchUrl,
+      watchUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&rel=0&playsinline=1`
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Could not load trailer." });
   }
 });
 

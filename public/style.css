@@ -33,6 +33,10 @@ body {
   overflow-x: hidden;
 }
 
+body.trailer-open {
+  overflow: hidden;
+}
+
 button,
 input {
   font: inherit;
@@ -44,6 +48,11 @@ button {
 
 input::placeholder {
   color: rgba(255, 255, 255, 0.55);
+}
+
+textarea,
+select {
+  font: inherit;
 }
 
 .navbar {
@@ -213,7 +222,7 @@ input::placeholder {
   margin: 0 auto;
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr);
-  gap: 18px;
+  gap: 10px 18px;
   align-items: center;
 }
 
@@ -237,7 +246,7 @@ input::placeholder {
 }
 
 .top-search-control::before {
-  content: "All";
+  content: "Find";
   position: absolute;
   left: 0;
   top: 0;
@@ -272,6 +281,46 @@ input::placeholder {
 
 .movie-search-input:focus {
   box-shadow: 0 0 0 3px var(--yellow);
+}
+
+.top-filter-bar {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(112px, 0.7fr) minmax(150px, 1fr) 84px;
+  gap: 10px;
+}
+
+.top-filter-select,
+.reset-filters-btn {
+  width: 100%;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius);
+  outline: none;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.top-filter-select {
+  background: #202020;
+  color: #ffffff;
+  padding: 0 10px;
+}
+
+.top-filter-select:focus,
+.reset-filters-btn:focus-visible {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.18);
+}
+
+.reset-filters-btn {
+  border: 0;
+  background: var(--yellow);
+  color: #000000;
+}
+
+.reset-filters-btn:hover {
+  background: var(--yellow-dark);
 }
 
 .hero {
@@ -578,6 +627,13 @@ input::placeholder {
   background: #222;
 }
 
+.wishlist-poster-link {
+  display: block;
+  width: 46px;
+  height: 68px;
+  border-radius: 4px;
+}
+
 .wishlist-title {
   color: #fff;
   font-size: 13px;
@@ -665,10 +721,25 @@ input::placeholder {
   object-fit: cover;
 }
 
+.poster-link {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.poster-link:focus-visible,
+.wishlist-poster-link:focus-visible,
+.wishlist-page-poster-link:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 3px;
+}
+
 .watch-flag {
   position: absolute;
   left: 10px;
   top: 10px;
+  z-index: 2;
   width: 34px;
   height: 42px;
   display: grid;
@@ -684,6 +755,122 @@ input::placeholder {
 .watch-flag.saved {
   background: var(--yellow);
   color: #000;
+  font-weight: 900;
+}
+
+.trailer-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(0, 0, 0, 0.84);
+}
+
+.trailer-modal.show {
+  display: flex;
+}
+
+.trailer-dialog {
+  width: min(980px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.trailer-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.trailer-heading {
+  min-width: 0;
+}
+
+.trailer-heading span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.trailer-heading h2 {
+  overflow: hidden;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trailer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.trailer-actions a {
+  color: #000;
+  background: var(--yellow);
+  border-radius: var(--radius);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.trailer-close {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.trailer-frame-wrap {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.trailer-frame-wrap iframe,
+.trailer-status {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.trailer-frame-wrap iframe {
+  border: 0;
+}
+
+.trailer-status {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #000;
+  color: var(--muted);
+  text-align: center;
+  font-size: 15px;
+}
+
+.trailer-status a {
+  color: var(--yellow);
   font-weight: 900;
 }
 
@@ -872,6 +1059,7 @@ input::placeholder {
   width: 72px;
   height: 72px;
   font-size: 22px;
+  flex: 0 0 auto;
 }
 
 .profile-form-grid {
@@ -902,13 +1090,177 @@ input::placeholder {
   outline: none;
 }
 
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  border: 1px solid #bcbcbc;
+  border-radius: var(--radius);
+  background: #fff;
+  color: #111;
+  outline: none;
+}
+
+.form-group select {
+  height: 44px;
+  padding: 0 13px;
+}
+
+.form-group textarea {
+  min-height: 130px;
+  resize: vertical;
+  padding: 12px 13px;
+}
+
 .form-group input:focus {
+  border-color: var(--yellow-dark);
+  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.22);
+}
+
+.form-group select:focus,
+.form-group textarea:focus {
   border-color: var(--yellow-dark);
   box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.22);
 }
 
 .full-width {
   grid-column: 1 / -1;
+}
+
+.settings-panel {
+  display: none;
+}
+
+.settings-panel.active {
+  display: block;
+}
+
+.upload-photo-btn {
+  width: fit-content;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 14px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: #111;
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.upload-photo-btn:hover {
+  background: #333;
+}
+
+.upload-photo-btn input {
+  display: none;
+}
+
+.settings-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 22px 0 16px;
+}
+
+.settings-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 0 16px;
+  border: 1px solid #d2d2d2;
+  border-radius: var(--radius);
+  background: #fff;
+  color: #111;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.settings-option:hover {
+  border-color: var(--yellow-dark);
+  background: #fff9df;
+}
+
+.settings-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--yellow);
+}
+
+.settings-note {
+  color: #5c5c5c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.feedback-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.feedback-empty,
+.feedback-item {
+  padding: 13px;
+  border: 1px solid #dedede;
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.feedback-empty {
+  color: #6a6a6a;
+  font-size: 14px;
+}
+
+.feedback-item strong {
+  display: block;
+  color: #111;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.feedback-item p {
+  color: #333;
+  font-size: 14px;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.feedback-item span {
+  color: #777;
+  font-size: 12px;
+}
+
+.admin-verify-box {
+  display: grid;
+  gap: 18px;
+  max-width: 540px;
+  margin-top: 22px;
+}
+
+.help-list {
+  display: grid;
+  gap: 14px;
+}
+
+.help-list div {
+  padding: 16px;
+  border: 1px solid #dedede;
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.help-list h4 {
+  color: #111;
+  font-size: 17px;
+  margin-bottom: 6px;
+}
+
+.help-list p {
+  color: #555;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .settings-actions {
@@ -935,6 +1287,8 @@ input::placeholder {
   border: 0;
   background: var(--yellow);
   color: #000;
+  align-items: center;
+  justify-content: center;
 }
 
 .wishlist-body {
@@ -1042,6 +1396,12 @@ input::placeholder {
   height: 100%;
   display: block;
   object-fit: cover;
+}
+
+.wishlist-page-poster-link {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .wishlist-page-info {
@@ -1199,6 +1559,10 @@ input::placeholder {
     gap: 10px;
   }
 
+  .top-filter-bar {
+    grid-column: 1;
+  }
+
   .top-search-inner h2 {
     font-size: 20px;
   }
@@ -1271,6 +1635,10 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .settings-option-grid {
+    grid-template-columns: 1fr;
+  }
+
   .wishlist-nav {
     display: flex;
   }
@@ -1301,6 +1669,15 @@ input::placeholder {
 
   .movie-search-input {
     padding-left: 14px;
+  }
+
+  .top-filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .top-filter-select,
+  .reset-filters-btn {
+    height: 42px;
   }
 
   .hero-copy h1 {
@@ -1411,6 +1788,16 @@ input::placeholder {
 
 .admin-table-wrap {
   overflow-x: auto;
+}
+
+.admin-feedback-card {
+  margin-top: 24px;
+  padding: 20px;
+}
+
+.admin-feedback-list {
+  display: grid;
+  gap: 10px;
 }
 
 .admin-table {
