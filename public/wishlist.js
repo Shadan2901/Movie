@@ -1,6 +1,8 @@
 const wishlistPageGrid = document.getElementById("wishlistPageGrid");
 const wishlistPageCount = document.getElementById("wishlistPageCount");
 const clearWishlistBtn = document.getElementById("clearWishlistBtn");
+let wishlist = [];
+let currentUser = null;
 
 const posterFallbacks = [
   "images/inception.jpg",
@@ -32,20 +34,37 @@ function getTrailerUrl(item) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 }
 
-function loadWishlist() {
+function getCurrentUser() {
   try {
-    return JSON.parse(localStorage.getItem("movieWishlist") || "[]");
+    return JSON.parse(localStorage.getItem("smartCurrentUser") || "null");
   } catch (error) {
-    return [];
+    return null;
   }
 }
 
-function saveWishlist(items) {
-  localStorage.setItem("movieWishlist", JSON.stringify(items));
+async function loadWishlist() {
+  currentUser = getCurrentUser();
+
+  if (currentUser?.id && location.protocol !== "file:") {
+    const response = await fetch(`/api/users/${encodeURIComponent(currentUser.id)}/wishlist`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load wishlist.");
+    wishlist = data.movies || [];
+    return;
+  }
+
+  try {
+    wishlist = JSON.parse(localStorage.getItem("movieWishlist") || "[]");
+  } catch (error) {
+    wishlist = [];
+  }
+}
+
+function saveGuestWishlist() {
+  localStorage.setItem("movieWishlist", JSON.stringify(wishlist));
 }
 
 function renderWishlistPage() {
-  const wishlist = loadWishlist();
   wishlistPageCount.textContent = `${wishlist.length} saved`;
   clearWishlistBtn.disabled = wishlist.length === 0;
 
@@ -90,20 +109,62 @@ function renderWishlistPage() {
   }).join("");
 }
 
-wishlistPageGrid.addEventListener("click", function (event) {
+wishlistPageGrid.addEventListener("click", async function (event) {
   const button = event.target.closest("[data-remove-key]");
   if (!button) return;
 
   const key = button.dataset.removeKey;
-  const nextWishlist = loadWishlist().filter(movie => getMovieKey(movie) !== key);
-  saveWishlist(nextWishlist);
+  const movie = wishlist.find(item => getMovieKey(item) === key);
+
+  if (currentUser?.id && movie?.id && location.protocol !== "file:") {
+    const response = await fetch(
+      `/api/users/${encodeURIComponent(currentUser.id)}/wishlist/${encodeURIComponent(movie.id)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Could not remove the movie.");
+      return;
+    }
+  }
+
+  wishlist = wishlist.filter(item => getMovieKey(item) !== key);
+  if (!currentUser?.id) saveGuestWishlist();
   renderWishlistPage();
 });
 
-clearWishlistBtn.addEventListener("click", function () {
+clearWishlistBtn.addEventListener("click", async function () {
   if (!confirm("Remove all movies from your wishlist?")) return;
-  saveWishlist([]);
+
+  if (currentUser?.id && location.protocol !== "file:") {
+    const response = await fetch(
+      `/api/users/${encodeURIComponent(currentUser.id)}/wishlist`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Could not clear the wishlist.");
+      return;
+    }
+  }
+
+  wishlist = [];
+  if (!currentUser?.id) saveGuestWishlist();
   renderWishlistPage();
 });
 
-renderWishlistPage();
+async function initializeWishlistPage() {
+  try {
+    await loadWishlist();
+    renderWishlistPage();
+  } catch (error) {
+    wishlistPageGrid.innerHTML = `
+      <div class="wishlist-page-empty">
+        <h2>Could not load wishlist</h2>
+        <p>${escapeHtml(error.message)}</p>
+      </div>
+    `;
+  }
+}
+
+initializeWishlistPage();

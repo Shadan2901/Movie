@@ -149,25 +149,33 @@ function applyAvatar(element, letter, photo) {
   }
 }
 
-function getUsers() {
-  try {
-    return JSON.parse(localStorage.getItem("smartMovieUsers") || "[]");
-  } catch (error) {
-    return [];
-  }
-}
-
-function saveCurrentUser(previousEmail = "") {
+async function saveCurrentUser(previousEmail = "") {
   if (!currentUser) return;
 
   localStorage.setItem("smartCurrentUser", JSON.stringify(currentUser));
 
-  const users = getUsers();
-  const userIndex = users.findIndex(user => user.email === (previousEmail || currentUser.email));
-  if (userIndex >= 0) {
-    users[userIndex] = { ...users[userIndex], ...currentUser };
-    localStorage.setItem("smartMovieUsers", JSON.stringify(users));
+  if (!currentUser.id) return;
+
+  const response = await fetch(`/api/users/${encodeURIComponent(currentUser.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...currentUser,
+      originalEmail: previousEmail || currentUser.email
+    })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not update the profile.");
   }
+
+  currentUser = {
+    ...currentUser,
+    ...data.user,
+    password: ""
+  };
+  localStorage.setItem("smartCurrentUser", JSON.stringify(currentUser));
 }
 
 function updateAuthUI() {
@@ -206,27 +214,29 @@ function updateLanguagePreview(language) {
   languagePreview.textContent = `Language selected: ${languageNames[selectedLanguage] || "English"}`;
 }
 
-function renderFeedbackList() {
-  let feedback = [];
-
+async function renderFeedbackList() {
   try {
-    feedback = JSON.parse(localStorage.getItem("smartFeedback") || "[]");
+    const query = currentUser?.id ? `?userId=${encodeURIComponent(currentUser.id)}` : "";
+    const response = await fetch(`/api/feedback${query}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load feedback.");
+    const feedback = data.feedback || [];
+
+    if (!feedback.length) {
+      feedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
+      return;
+    }
+
+    feedbackList.innerHTML = feedback.slice(0, 4).map(item => `
+      <div class="feedback-item">
+        <strong>${escapeHtml(item.type)}</strong>
+        <p>${escapeHtml(item.message)}</p>
+        <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date)}</span>
+      </div>
+    `).join("");
   } catch (error) {
-    feedback = [];
+    feedbackList.innerHTML = `<div class="feedback-empty">${escapeHtml(error.message)}</div>`;
   }
-
-  if (!feedback.length) {
-    feedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
-    return;
-  }
-
-  feedbackList.innerHTML = feedback.slice(0, 4).map(item => `
-    <div class="feedback-item">
-      <strong>${escapeHtml(item.type)}</strong>
-      <p>${escapeHtml(item.message)}</p>
-      <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date)}</span>
-    </div>
-  `).join("");
 }
 
 function switchSettingsTab(tab) {
@@ -341,7 +351,7 @@ profileImageInput.addEventListener("change", function () {
   reader.readAsDataURL(file);
 });
 
-saveProfileBtn.addEventListener("click", function () {
+saveProfileBtn.addEventListener("click", async function () {
   if (!currentUser && currentSettingsTab !== "admin") return;
 
   if (currentSettingsTab === "profile") {
@@ -355,10 +365,14 @@ saveProfileBtn.addEventListener("click", function () {
     currentUser.password = passwordInput.value;
     currentUser.photo = pendingProfilePhoto;
 
-    saveCurrentUser(originalProfileEmail);
-    updateAuthUI();
-    closeProfileEditor();
-    addMessage("Profile updated successfully.", "bot");
+    try {
+      await saveCurrentUser(originalProfileEmail);
+      updateAuthUI();
+      closeProfileEditor();
+      addMessage("Profile updated successfully.", "bot");
+    } catch (error) {
+      addMessage(error.message, "bot");
+    }
     return;
   }
 
@@ -366,9 +380,13 @@ saveProfileBtn.addEventListener("click", function () {
     const selectedLanguage = getSelectedLanguage();
     currentUser.language = selectedLanguage;
     localStorage.setItem("smartLanguage", selectedLanguage);
-    saveCurrentUser();
-    updateLanguagePreview(selectedLanguage);
-    addMessage(`Language saved: ${languageNames[selectedLanguage] || "English"}.`, "bot");
+    try {
+      await saveCurrentUser();
+      updateLanguagePreview(selectedLanguage);
+      addMessage(`Language saved: ${languageNames[selectedLanguage] || "English"}.`, "bot");
+    } catch (error) {
+      addMessage(error.message, "bot");
+    }
     return;
   }
 
@@ -379,33 +397,49 @@ saveProfileBtn.addEventListener("click", function () {
       return;
     }
 
-    const feedback = JSON.parse(localStorage.getItem("smartFeedback") || "[]");
-    feedback.unshift({
-      type: feedbackTypeInput.value,
-      message,
-      user: currentUser.email || getDisplayName(),
-      date: new Date().toLocaleString()
-    });
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          type: feedbackTypeInput.value,
+          message
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not submit feedback.");
 
-    localStorage.setItem("smartFeedback", JSON.stringify(feedback));
-    feedbackMessageInput.value = "";
-    renderFeedbackList();
-    addMessage("Thank you. Your feedback has been submitted.", "bot");
+      feedbackMessageInput.value = "";
+      await renderFeedbackList();
+      addMessage("Thank you. Your feedback has been submitted.", "bot");
+    } catch (error) {
+      addMessage(error.message, "bot");
+    }
     return;
   }
 
   if (currentSettingsTab === "admin") {
     const email = adminEmailInput.value.trim().toLowerCase();
     const password = adminPasswordInput.value;
-    const isAdmin = email === "admin@smartmovies.com" && password === "admin123";
 
-    if (!isAdmin) {
-      addMessage("Admin verification failed. Please check the admin email and password.", "bot");
-      return;
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+
+      if (!response.ok || data.user?.role !== "admin") {
+        throw new Error("Admin verification failed. Please check the admin email and password.");
+      }
+
+      localStorage.setItem("smartAdminVerified", "true");
+      window.location.href = "admin-dashboard.html";
+    } catch (error) {
+      addMessage(error.message, "bot");
     }
-
-    localStorage.setItem("smartAdminVerified", "true");
-    window.location.href = "admin-dashboard.html";
   }
 });
 
@@ -436,7 +470,19 @@ function getMovieKey(item) {
   return String(item.id || `${item.title || "movie"}-${item.year || ""}`).toLowerCase();
 }
 
-function loadWishlist() {
+async function loadWishlist() {
+  if (currentUser?.id && location.protocol !== "file:") {
+    try {
+      const response = await fetch(`/api/users/${encodeURIComponent(currentUser.id)}/wishlist`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load wishlist.");
+      wishlist = data.movies || [];
+      return;
+    } catch (error) {
+      addMessage(error.message, "bot");
+    }
+  }
+
   try {
     wishlist = JSON.parse(localStorage.getItem("movieWishlist") || "[]");
   } catch (error) {
@@ -544,19 +590,42 @@ function updateWatchButtons() {
   });
 }
 
-function toggleWishlist(movie) {
+async function toggleWishlist(movie) {
   const key = getMovieKey(movie);
   const existingIndex = wishlist.findIndex(savedMovie => getMovieKey(savedMovie) === key);
 
-  if (existingIndex >= 0) {
+  if (currentUser?.id && location.protocol !== "file:") {
+    const url = `/api/users/${encodeURIComponent(currentUser.id)}/wishlist`;
+    const response = await fetch(
+      existingIndex >= 0 ? `${url}/${encodeURIComponent(movie.id)}` : url,
+      existingIndex >= 0
+        ? { method: "DELETE" }
+        : {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ movieId: movie.id })
+          }
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not update wishlist.");
+
+    if (existingIndex >= 0) {
+      wishlist.splice(existingIndex, 1);
+    } else {
+      wishlist = data.movies || [movie, ...wishlist];
+    }
+  } else if (existingIndex >= 0) {
     wishlist.splice(existingIndex, 1);
-    addMessage(`<b>${escapeHtml(movie.title)}</b> removed from your wishlist.`, "bot");
+    saveWishlist();
   } else {
     wishlist.unshift(movie);
-    addMessage(`<b>${escapeHtml(movie.title)}</b> added to your wishlist.`, "bot");
+    saveWishlist();
   }
 
-  saveWishlist();
+  addMessage(
+    `<b>${escapeHtml(movie.title)}</b> ${existingIndex >= 0 ? "removed from" : "added to"} your wishlist.`,
+    "bot"
+  );
   renderWishlist();
   updateWatchButtons();
 }
@@ -769,7 +838,8 @@ async function askAI(sourceInput = input) {
       },
       body: JSON.stringify({
         prompt: userText,
-        username: currentUser ? getDisplayName() : "guest"
+        username: currentUser ? getDisplayName() : "guest",
+        userId: currentUser?.id || null
       })
     });
 
@@ -859,26 +929,39 @@ resetFiltersBtn.addEventListener("click", function () {
   loadMovies();
 });
 
-movieGrid.addEventListener("click", function (event) {
+movieGrid.addEventListener("click", async function (event) {
   const button = event.target.closest(".watch-flag");
   if (!button) return;
 
   try {
     const movie = JSON.parse(button.dataset.movie || "{}");
-    toggleWishlist(movie);
+    await toggleWishlist(movie);
   } catch (error) {
     addMessage("Could not update wishlist for this movie.", "bot");
   }
 });
 
-wishlistList.addEventListener("click", function (event) {
+wishlistList.addEventListener("click", async function (event) {
   const button = event.target.closest("[data-wishlist-remove]");
   if (!button) return;
 
   const key = button.dataset.wishlistRemove;
   const movie = wishlist.find(savedMovie => getMovieKey(savedMovie) === key);
+
+  if (currentUser?.id && movie?.id && location.protocol !== "file:") {
+    const response = await fetch(
+      `/api/users/${encodeURIComponent(currentUser.id)}/wishlist/${encodeURIComponent(movie.id)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      addMessage(data.error || "Could not remove the movie.", "bot");
+      return;
+    }
+  }
+
   wishlist = wishlist.filter(savedMovie => getMovieKey(savedMovie) !== key);
-  saveWishlist();
+  if (!currentUser?.id) saveWishlist();
   renderWishlist();
   updateWatchButtons();
 
@@ -887,8 +970,12 @@ wishlistList.addEventListener("click", function (event) {
   }
 });
 
-loadWishlist();
-renderWishlist();
-updateAuthUI();
-populateFilterOptions();
-loadMovies();
+async function initializePage() {
+  updateAuthUI();
+  await loadWishlist();
+  renderWishlist();
+  populateFilterOptions();
+  loadMovies();
+}
+
+initializePage();

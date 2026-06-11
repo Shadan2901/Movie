@@ -1,10 +1,28 @@
 const express = require("express");
 const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
+const crypto = require("crypto");
+const {
+  databaseConfig,
+  initializeDatabase,
+  getAllMovies,
+  createMovie,
+  updateMovie,
+  deleteMovie,
+  createUser,
+  getUserByEmail,
+  updateUser,
+  getWishlist,
+  addWishlistItem,
+  removeWishlistItem,
+  clearWishlist,
+  createFeedback,
+  getFeedback,
+  saveRecommendationHistory,
+  getCounts
+} = require("./database");
 
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -13,7 +31,6 @@ app.use(express.static("public"));
 const OLLAMA_URL = "http://localhost:11434/api/generate";
 const OLLAMA_MODEL = "gemma3";
 
-const moviesPath = path.join(__dirname, "data", "movies.json");
 let movies = [];
 
 const GENRE_NAMES = {
@@ -38,14 +55,51 @@ const GENRE_NAMES = {
   10770: "TV Movie"
 };
 
-if (fs.existsSync(moviesPath)) {
-  movies = JSON.parse(fs.readFileSync(moviesPath, "utf-8"));
+async function refreshMovies() {
+  movies = await getAllMovies();
 }
 
-console.log("TOTAL MOVIES LOADED:", movies.length);
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  return {
+    salt,
+    hash: crypto.scryptSync(password, salt, 64).toString("hex")
+  };
+}
 
-function saveMovies() {
-  fs.writeFileSync(moviesPath, JSON.stringify(movies, null, 2), "utf-8");
+function isValidPassword(password, user) {
+  const suppliedHash = Buffer.from(hashPassword(password, user.password_salt).hash, "hex");
+  const savedHash = Buffer.from(user.password_hash, "hex");
+  return suppliedHash.length === savedHash.length && crypto.timingSafeEqual(suppliedHash, savedHash);
+}
+
+function publicUser(user) {
+  return {
+    id: Number(user.id),
+    firstName: user.first_name,
+    lastName: user.last_name,
+    email: user.email,
+    contact: user.contact,
+    address: user.address,
+    city: user.city,
+    state: user.state,
+    role: user.role,
+    language: user.language || "en",
+    photo: user.profile_photo || ""
+  };
+}
+
+async function ensureAdminUser() {
+  if (await getUserByEmail("admin@smartmovies.com")) return;
+
+  const password = hashPassword("admin123");
+  await createUser({
+    firstName: "Admin",
+    lastName: "User",
+    email: "admin@smartmovies.com",
+    passwordHash: password.hash,
+    passwordSalt: password.salt,
+    role: "admin"
+  });
 }
 
 function normalizeMovie(payload, existingMovie = {}) {
@@ -235,20 +289,24 @@ app.get("/api/admin/movies", (req, res) => {
   });
 });
 
-app.post("/api/admin/movies", (req, res) => {
+app.post("/api/admin/movies", async (req, res) => {
   const movie = normalizeMovie(req.body || {});
 
   if (!movie.title || !movie.year) {
     return res.status(400).json({ error: "Title and year are required." });
   }
 
-  movies.unshift(movie);
-  saveMovies();
+  try {
+    await createMovie(movie);
+    await refreshMovies();
+  } catch (error) {
+    return res.status(409).json({ error: "A movie with this ID already exists." });
+  }
 
   res.status(201).json({ movie });
 });
 
-app.put("/api/admin/movies/:id", (req, res) => {
+app.put("/api/admin/movies/:id", async (req, res) => {
   const id = String(req.params.id);
   const index = movies.findIndex(movie => String(movie.id) === id);
 
@@ -262,23 +320,185 @@ app.put("/api/admin/movies/:id", (req, res) => {
     return res.status(400).json({ error: "Title and year are required." });
   }
 
-  movies[index] = movie;
-  saveMovies();
+  await updateMovie(movie);
+  await refreshMovies();
 
   res.json({ movie });
 });
 
-app.delete("/api/admin/movies/:id", (req, res) => {
+app.delete("/api/admin/movies/:id", async (req, res) => {
   const id = String(req.params.id);
-  const beforeCount = movies.length;
-  movies = movies.filter(movie => String(movie.id) !== id);
-
-  if (movies.length === beforeCount) {
+  if (!await deleteMovie(id)) {
     return res.status(404).json({ error: "Movie not found." });
   }
 
-  saveMovies();
+  await refreshMovies();
   res.json({ ok: true });
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  const body = req.body || {};
+  const firstName = String(body.firstName || "").trim();
+  const email = String(body.email || "").trim().toLowerCase();
+  const rawPassword = String(body.password || "");
+
+  if (!firstName || !email || rawPassword.length < 6) {
+    return res.status(400).json({
+      error: "First name, a valid email, and a password of at least 6 characters are required."
+    });
+  }
+
+  if (await getUserByEmail(email)) {
+    return res.status(409).json({ error: "This email is already registered." });
+  }
+
+  const password = hashPassword(rawPassword);
+
+  try {
+    const user = await createUser({
+      firstName,
+      lastName: String(body.lastName || "").trim(),
+      email,
+      contact: String(body.contact || "").trim(),
+      address: String(body.address || "").trim(),
+      city: String(body.city || "").trim(),
+      state: String(body.state || "").trim(),
+      passwordHash: password.hash,
+      passwordSalt: password.salt
+    });
+
+    res.status(201).json({ user: publicUser(user) });
+  } catch (error) {
+    res.status(500).json({ error: "Could not create the account." });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  const user = await getUserByEmail(email);
+
+  if (!user || !isValidPassword(password, user)) {
+    return res.status(401).json({ error: "Invalid email or password." });
+  }
+
+  res.json({ user: publicUser(user) });
+});
+
+app.put("/api/users/:id", async (req, res) => {
+  const existingUser = await getUserByEmail(String(req.body?.originalEmail || req.body?.email || "").toLowerCase());
+
+  if (!existingUser || Number(existingUser.id) !== Number(req.params.id)) {
+    return res.status(404).json({ error: "User not found." });
+  }
+
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const firstName = String(req.body?.firstName || "").trim();
+
+  if (!email || !firstName) {
+    return res.status(400).json({ error: "First name and email are required." });
+  }
+
+  const duplicate = await getUserByEmail(email);
+  if (duplicate && Number(duplicate.id) !== Number(req.params.id)) {
+    return res.status(409).json({ error: "This email is already registered." });
+  }
+
+  const changes = {
+    firstName,
+    lastName: String(req.body?.lastName || "").trim(),
+    email,
+    contact: String(req.body?.contact || "").trim(),
+    address: String(req.body?.address || "").trim(),
+    city: String(req.body?.city || "").trim(),
+    state: String(req.body?.state || "").trim(),
+    language: String(req.body?.language || "en").trim(),
+    photo: String(req.body?.photo || "")
+  };
+
+  const newPassword = String(req.body?.password || "");
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "The new password must be at least 6 characters." });
+    }
+    const password = hashPassword(newPassword);
+    changes.passwordHash = password.hash;
+    changes.passwordSalt = password.salt;
+  }
+
+  try {
+    const user = await updateUser(req.params.id, changes);
+    res.json({ user: publicUser(user) });
+  } catch (error) {
+    res.status(500).json({ error: "Could not update the profile." });
+  }
+});
+
+app.get("/api/users/:id/wishlist", async (req, res) => {
+  res.json({ movies: await getWishlist(req.params.id) });
+});
+
+app.post("/api/users/:id/wishlist", async (req, res) => {
+  const movieId = String(req.body?.movieId || "").trim();
+  if (!movieId) {
+    return res.status(400).json({ error: "Movie ID is required." });
+  }
+
+  try {
+    const wishlistMovies = await addWishlistItem(req.params.id, movieId);
+    res.status(201).json({ movies: wishlistMovies });
+  } catch (error) {
+    if (error.code === "ER_NO_REFERENCED_ROW_2") {
+      return res.status(404).json({ error: "User or movie not found." });
+    }
+    throw error;
+  }
+});
+
+app.delete("/api/users/:id/wishlist/:movieId", async (req, res) => {
+  await removeWishlistItem(req.params.id, req.params.movieId);
+  res.json({ ok: true });
+});
+
+app.delete("/api/users/:id/wishlist", async (req, res) => {
+  const removed = await clearWishlist(req.params.id);
+  res.json({ ok: true, removed });
+});
+
+app.get("/api/feedback", async (req, res) => {
+  const userId = req.query.userId ? Number(req.query.userId) : null;
+  res.json({ feedback: await getFeedback(userId) });
+});
+
+app.post("/api/feedback", async (req, res) => {
+  const type = String(req.body?.type || "").trim();
+  const message = String(req.body?.message || "").trim();
+
+  if (!type || !message) {
+    return res.status(400).json({ error: "Feedback type and message are required." });
+  }
+
+  const id = await createFeedback({
+    userId: req.body?.userId,
+    type,
+    message
+  });
+  res.status(201).json({ id });
+});
+
+app.get("/api/admin/feedback", async (req, res) => {
+  res.json({ feedback: await getFeedback() });
+});
+
+app.get("/api/database/status", async (req, res) => {
+  res.json({
+    connected: true,
+    database: "MySQL",
+    host: databaseConfig.host,
+    port: databaseConfig.port,
+    name: databaseConfig.database,
+    counts: await getCounts()
+  });
 });
 
 app.get("/api/health", async (req, res) => {
@@ -344,7 +564,7 @@ app.get("/api/trailer", async (req, res) => {
 
 app.post("/api/recommend", async (req, res) => {
   try {
-    const { prompt, username } = req.body;
+    const { prompt, username, userId } = req.body;
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: "Prompt is required." });
@@ -427,8 +647,16 @@ Message: ${prompt}
         });
       }
 
+      const reply = parsed.reply || "How can I help you?";
+      await saveRecommendationHistory({
+        userId,
+        prompt,
+        reply,
+        recommendations: []
+      });
+
       return res.json({
-        reply: parsed.reply || "How can I help you?",
+        reply,
         recommendations: []
       });
     }
@@ -506,6 +734,7 @@ Request: ${prompt}
         if (!movie) return null;
 
         return {
+          id: movie.id,
           title: movie.title,
           year: movie.year,
           rating: movie.rating,
@@ -516,8 +745,16 @@ Request: ${prompt}
       })
       .filter(Boolean);
 
+    const reply = parsed.reply || "Here are some movie recommendations.";
+    await saveRecommendationHistory({
+      userId,
+      prompt,
+      reply,
+      recommendations
+    });
+
     return res.json({
-      reply: parsed.reply || "Here are some movie recommendations.",
+      reply,
       recommendations
     });
   } catch (error) {
@@ -528,6 +765,37 @@ Request: ${prompt}
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+app.use((error, req, res, next) => {
+  console.error("SERVER ERROR:", error);
+
+  if (req.path.startsWith("/api/")) {
+    const status = Number(error.status || error.statusCode) || 500;
+    return res.status(status).json({
+      error: status >= 500 ? "A database or server error occurred." : error.message
+    });
+  }
+
+  next(error);
 });
+
+async function startServer() {
+  try {
+    await initializeDatabase();
+    await ensureAdminUser();
+    await refreshMovies();
+
+    console.log(
+      `MYSQL DATABASE: ${databaseConfig.database} at ${databaseConfig.host}:${databaseConfig.port}`
+    );
+    console.log("TOTAL MOVIES LOADED:", movies.length);
+
+    app.listen(port, () => {
+      console.log(`Server running on http://localhost:${port}`);
+    });
+  } catch (error) {
+    console.error("Could not start the MySQL database connection:", error.message);
+    process.exit(1);
+  }
+}
+
+startServer();

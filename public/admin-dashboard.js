@@ -78,7 +78,7 @@ async function fetchMovies() {
     const data = await response.json();
     movies = data.movies || [];
     renderMovies(data.total);
-    setStatus("Server catalog");
+    setStatus("MySQL database");
   } catch (error) {
     serverMode = false;
     loadLocalMovies();
@@ -171,28 +171,30 @@ function renderMovies(totalOverride) {
   }).join("");
 }
 
-function renderAdminFeedback() {
+async function renderAdminFeedback() {
   if (!adminFeedbackList) return;
 
-  let feedback = [];
   try {
-    feedback = JSON.parse(localStorage.getItem("smartFeedback") || "[]");
+    const response = await fetch("/api/admin/feedback");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load feedback.");
+    const feedback = data.feedback || [];
+
+    if (!feedback.length) {
+      adminFeedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
+      return;
+    }
+
+    adminFeedbackList.innerHTML = feedback.map(item => `
+      <div class="feedback-item">
+        <strong>${escapeHtml(item.type)}</strong>
+        <p>${escapeHtml(item.message)}</p>
+        <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date || "")}</span>
+      </div>
+    `).join("");
   } catch (error) {
-    feedback = [];
+    adminFeedbackList.innerHTML = `<div class="feedback-empty">${escapeHtml(error.message)}</div>`;
   }
-
-  if (!feedback.length) {
-    adminFeedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
-    return;
-  }
-
-  adminFeedbackList.innerHTML = feedback.map(item => `
-    <div class="feedback-item">
-      <strong>${escapeHtml(item.type)}</strong>
-      <p>${escapeHtml(item.message)}</p>
-      <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date || "")}</span>
-    </div>
-  `).join("");
 }
 
 async function saveMovie(record) {
@@ -256,7 +258,7 @@ movieForm.addEventListener("submit", async function (event) {
     setStatus("Saving...");
     await saveMovie(record);
     resetForm();
-    setStatus(serverMode ? "Saved to data/movies.json" : "Saved locally");
+    setStatus(serverMode ? "Saved to MySQL database" : "Saved locally");
   } catch (error) {
     setStatus(error.message);
   }
