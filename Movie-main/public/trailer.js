@@ -20,6 +20,15 @@ function commandTrailerPlayer(frame, command) {
   }), "https://www.youtube.com");
 }
 
+function startTrailerPlayback(frame) {
+  [0, 350, 1000].forEach(delay => {
+    window.setTimeout(() => {
+      commandTrailerPlayer(frame, "mute");
+      commandTrailerPlayer(frame, "playVideo");
+    }, delay);
+  });
+}
+
 function ensureTrailerModal() {
   let modal = document.getElementById("trailerModal");
   if (modal) return modal;
@@ -109,8 +118,7 @@ async function openTrailerModal(title, year, movieId = "") {
     frame.src = `${data.embedUrl}&origin=${encodeURIComponent(location.origin)}`;
     frame.addEventListener("load", () => {
       status.style.display = "none";
-      commandTrailerPlayer(frame, "mute");
-      commandTrailerPlayer(frame, "playVideo");
+      startTrailerPlayback(frame);
     }, { once: true });
   } catch (error) {
     status.innerHTML = `Trailer could not autoplay. <a href="${searchUrl}" target="_blank" rel="noopener noreferrer">Open on YouTube</a>`;
