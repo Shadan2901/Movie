@@ -3,6 +3,23 @@ function buildTrailerSearchUrl(title, year) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 }
 
+function buildTrailerApiUrl(params) {
+  const localHosts = ["localhost", "127.0.0.1"];
+  const usesStaticPreview =
+    location.protocol === "file:" ||
+    (localHosts.includes(location.hostname) && location.port && location.port !== "3000");
+  const apiOrigin = usesStaticPreview ? "http://localhost:3000" : "";
+  return `${apiOrigin}/api/trailer?${params.toString()}`;
+}
+
+function commandTrailerPlayer(frame, command) {
+  frame.contentWindow?.postMessage(JSON.stringify({
+    event: "command",
+    func: command,
+    args: []
+  }), "https://www.youtube.com");
+}
+
 function ensureTrailerModal() {
   let modal = document.getElementById("trailerModal");
   if (modal) return modal;
@@ -26,7 +43,9 @@ function ensureTrailerModal() {
         <iframe
           id="trailerFrame"
           title="Movie trailer"
+          loading="eager"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
           allowfullscreen
         ></iframe>
         <div class="trailer-status" id="trailerStatus">Loading trailer...</div>
@@ -53,7 +72,7 @@ function closeTrailerModal() {
   document.body.classList.remove("trailer-open");
 }
 
-async function openTrailerModal(title, year) {
+async function openTrailerModal(title, year, movieId = "") {
   const modal = ensureTrailerModal();
   const frame = modal.querySelector("#trailerFrame");
   const status = modal.querySelector("#trailerStatus");
@@ -70,11 +89,16 @@ async function openTrailerModal(title, year) {
   document.body.classList.add("trailer-open");
 
   try {
-    if (location.protocol === "file:") {
-      throw new Error("Trailer autoplay needs the local server.");
+    const params = new URLSearchParams({
+      id: movieId,
+      title,
+      year: year || ""
+    });
+    const response = await fetch(buildTrailerApiUrl(params));
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      throw new Error("Trailer API is not running.");
     }
-
-    const response = await fetch(`/api/trailer?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year || "")}`);
     const data = await response.json();
 
     if (!response.ok || !data.embedUrl) {
@@ -82,9 +106,11 @@ async function openTrailerModal(title, year) {
     }
 
     youtubeLink.href = data.watchUrl || data.searchUrl || searchUrl;
-    frame.src = data.embedUrl;
+    frame.src = `${data.embedUrl}&origin=${encodeURIComponent(location.origin)}`;
     frame.addEventListener("load", () => {
       status.style.display = "none";
+      commandTrailerPlayer(frame, "mute");
+      commandTrailerPlayer(frame, "playVideo");
     }, { once: true });
   } catch (error) {
     status.innerHTML = `Trailer could not autoplay. <a href="${searchUrl}" target="_blank" rel="noopener noreferrer">Open on YouTube</a>`;
@@ -96,7 +122,11 @@ document.addEventListener("click", event => {
   if (!trailerLink) return;
 
   event.preventDefault();
-  openTrailerModal(trailerLink.dataset.trailerTitle, trailerLink.dataset.trailerYear || "");
+  openTrailerModal(
+    trailerLink.dataset.trailerTitle,
+    trailerLink.dataset.trailerYear || "",
+    trailerLink.dataset.trailerId || ""
+  );
 });
 
 document.addEventListener("keydown", event => {

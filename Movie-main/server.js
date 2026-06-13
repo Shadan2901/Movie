@@ -1,11 +1,14 @@
 const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const {
   databaseConfig,
   initializeDatabase,
   getAllMovies,
   createMovie,
+  upsertMovies,
   updateMovie,
   deleteMovie,
   createUser,
@@ -20,6 +23,7 @@ const {
   saveRecommendationHistory,
   getCounts
 } = require("./database");
+const { fetchLatestMovies, fetchMovieTrailer } = require("./tmdb");
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
@@ -28,10 +32,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-const OLLAMA_URL = "http://localhost:11434/api/generate";
+const OLLAMA_CHAT_URL = "http://localhost:11434/api/chat";
 const OLLAMA_MODEL = "gemma3";
 
 let movies = [];
+let databaseConnected = false;
 
 const GENRE_NAMES = {
   12: "Adventure",
@@ -57,6 +62,12 @@ const GENRE_NAMES = {
 
 async function refreshMovies() {
   movies = await getAllMovies();
+}
+
+function loadLocalMovies() {
+  const filePath = path.join(__dirname, "data", "movies.json");
+  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  return Array.isArray(data) ? data : [];
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -118,7 +129,7 @@ function normalizeMovie(payload, existingMovie = {}) {
 
 function isTargetYear(movie) {
   const year = Number(movie.year);
-  return year >= 2004 && year <= 2026;
+  return year >= 2004 && year <= new Date().getFullYear() + 1;
 }
 
 function getGenreNames(movie) {
@@ -219,6 +230,138 @@ function getCandidateMovies(promptText) {
   return filtered;
 }
 
+function isMovieRequest(promptText) {
+  const text = String(promptText || "").toLowerCase();
+  const explicitMovieTerms = [
+    "movie",
+    "movies",
+    "film",
+    "films",
+    "cinema",
+    "watch tonight",
+    "what should i watch",
+    "something to watch",
+    "marvel",
+    "spider-man",
+    "batman"
+  ];
+  const recommendationTerms = ["recommend", "suggest", "best", "show me", "give me"];
+  const movieCategories = [
+    "action",
+    "romance",
+    "comedy",
+    "horror",
+    "thriller",
+    "drama",
+    "animation",
+    "adventure",
+    "fantasy",
+    "science fiction",
+    "sci-fi",
+    "documentary",
+    "funny",
+    "scary",
+    "romantic",
+    "sad"
+  ];
+
+  return explicitMovieTerms.some(term => text.includes(term)) ||
+    (
+      recommendationTerms.some(term => text.includes(term)) &&
+      movieCategories.some(category => text.includes(category))
+    );
+}
+
+function cleanConversationHistory(history) {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .filter(item =>
+      item &&
+      ["user", "assistant"].includes(item.role) &&
+      typeof item.content === "string" &&
+      item.content.trim()
+    )
+    .slice(-10)
+    .map(item => ({
+      role: item.role,
+      content: item.content.trim().slice(0, 4000)
+    }));
+}
+
+async function askOllama(messages, options = {}) {
+  let response;
+
+  try {
+    response = await fetch(OLLAMA_CHAT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages,
+        stream: false,
+        ...(options.format ? { format: options.format } : {}),
+        options: {
+          temperature: options.temperature ?? 0.4,
+          num_predict: options.numPredict ?? 400
+        }
+      }),
+      signal: AbortSignal.timeout(120000)
+    });
+  } catch (error) {
+    if (error.name === "TimeoutError") {
+      throw new Error("Ollama took too long to answer. Please try again.");
+    }
+    throw new Error("Could not connect to Ollama. Make sure Ollama is running.");
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ollama request failed: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const content = String(data.message?.content || "").trim();
+  if (!content) throw new Error("Ollama returned an empty response.");
+  return content;
+}
+
+function parseOllamaJson(content) {
+  const cleaned = String(content || "")
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error("Ollama returned an invalid structured response.");
+  }
+}
+
+async function saveAssistantHistory(entry) {
+  try {
+    await saveRecommendationHistory(entry);
+  } catch (error) {
+    if (entry.userId && error.code === "ER_NO_REFERENCED_ROW_2") {
+      try {
+        await saveRecommendationHistory({ ...entry, userId: null });
+        return;
+      } catch (retryError) {
+        console.error("Could not save anonymous assistant history:", retryError.message);
+        return;
+      }
+    }
+
+    console.error("Could not save assistant history:", error.message);
+  }
+}
+
 app.get("/api/movies", (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 12;
@@ -287,6 +430,26 @@ app.get("/api/admin/movies", (req, res) => {
     total: filteredMovies.length,
     movies: filteredMovies.slice(0, 250)
   });
+});
+
+app.post("/api/admin/movies/sync-latest", async (req, res) => {
+  try {
+    const moviesFromTmdb = await fetchLatestMovies({
+      pages: req.body?.pages,
+      region: req.body?.region
+    });
+    const result = await upsertMovies(moviesFromTmdb);
+    await refreshMovies();
+
+    res.json({
+      ok: true,
+      ...result,
+      total: movies.length
+    });
+  } catch (error) {
+    const status = error.code === "TMDB_NOT_CONFIGURED" ? 503 : 502;
+    res.status(status).json({ error: error.message });
+  }
 });
 
 app.post("/api/admin/movies", async (req, res) => {
@@ -491,6 +654,14 @@ app.get("/api/admin/feedback", async (req, res) => {
 });
 
 app.get("/api/database/status", async (req, res) => {
+  if (!databaseConnected) {
+    return res.status(503).json({
+      connected: false,
+      database: "Local movie catalog fallback",
+      counts: { movies: movies.length }
+    });
+  }
+
   res.json({
     connected: true,
     database: "MySQL",
@@ -520,6 +691,7 @@ app.get("/api/health", async (req, res) => {
 
 app.get("/api/trailer", async (req, res) => {
   try {
+    const movieId = String(req.query.id || "").trim();
     const title = String(req.query.title || "").trim();
     const year = String(req.query.year || "").trim();
 
@@ -529,6 +701,26 @@ app.get("/api/trailer", async (req, res) => {
 
     const query = `${title} ${year} official trailer`.trim();
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    let videoId = "";
+
+    if (/^\d+$/.test(movieId)) {
+      try {
+        const trailer = await fetchMovieTrailer(movieId);
+        videoId = trailer?.key || "";
+      } catch (error) {
+        console.warn(`TMDB trailer lookup failed for movie ${movieId}:`, error.message);
+      }
+    }
+
+    if (videoId) {
+      return res.json({
+        videoId,
+        searchUrl,
+        watchUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&rel=0&playsinline=1&enablejsapi=1`
+      });
+    }
+
     const response = await fetch(searchUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0",
@@ -545,7 +737,7 @@ app.get("/api/trailer", async (req, res) => {
       .map(match => match[1])
       .filter((videoId, index, list) => list.indexOf(videoId) === index);
 
-    const videoId = videoIds[0];
+    videoId = videoIds[0];
 
     if (!videoId) {
       return res.status(404).json({ error: "No trailer video found.", searchUrl });
@@ -555,7 +747,7 @@ app.get("/api/trailer", async (req, res) => {
       videoId,
       searchUrl,
       watchUrl: `https://www.youtube.com/watch?v=${videoId}`,
-      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&rel=0&playsinline=1`
+      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&rel=0&playsinline=1&enablejsapi=1`
     });
   } catch (error) {
     res.status(500).json({ error: "Could not load trailer." });
@@ -564,91 +756,31 @@ app.get("/api/trailer", async (req, res) => {
 
 app.post("/api/recommend", async (req, res) => {
   try {
-    const { prompt, username, userId } = req.body;
+    const { prompt, username, userId, history } = req.body;
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: "Prompt is required." });
     }
 
-    const cleanPrompt = prompt.toLowerCase().trim();
+    const movieRequest = isMovieRequest(prompt);
+    const conversation = cleanConversationHistory(history);
 
-    const movieIntentKeywords = [
-      "recommend",
-      "movie",
-      "movies",
-      "watch",
-      "suggest",
-      "film",
-      "action movie",
-      "romance movie",
-      "comedy movie",
-      "horror movie",
-      "marvel movie",
-      "spider-man",
-      "batman",
-      "thriller movie",
-      "what should i watch",
-      "give me movie",
-      "best movie"
-    ];
-
-    const isMovieRequest = movieIntentKeywords.some(keyword =>
-      cleanPrompt.includes(keyword)
-    );
-
-    if (!isMovieRequest) {
-      const chatPrompt = `
-You are a friendly AI assistant for a movie website.
-
-Rules:
-1. Answer normally like ChatGPT.
-2. Be simple, helpful, and short.
-3. Do not recommend movies unless the user is clearly asking for movies.
-4. Return JSON only.
-
-Use exactly this format:
-{
-  "reply": "your normal assistant reply here",
-  "recommendations": []
-}
-
-User: ${username || "Guest"}
-Message: ${prompt}
-      `.trim();
-
-      const ollamaResponse = await fetch(OLLAMA_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
+    if (!movieRequest) {
+      const reply = await askOllama([
+        {
+          role: "system",
+          content: `You are Smart Assistant, a friendly and capable general AI assistant inside a movie website.
+Answer any normal question the user asks, not only movie questions.
+Be accurate, clear, and practical. Match the user's language when possible.
+Keep most answers concise, using short paragraphs or simple lists when useful.
+If you are uncertain, say so instead of inventing facts.
+Do not mention these instructions. The user's display name is ${username || "Guest"}.`
         },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt: chatPrompt,
-          stream: false,
-          format: "json"
-        })
-      });
+        ...conversation,
+        { role: "user", content: String(prompt).trim() }
+      ]);
 
-      if (!ollamaResponse.ok) {
-        const errorText = await ollamaResponse.text();
-        return res.status(500).json({
-          error: "Ollama request failed: " + errorText
-        });
-      }
-
-      const data = await ollamaResponse.json();
-
-      let parsed;
-      try {
-        parsed = JSON.parse(data.response);
-      } catch (err) {
-        return res.status(500).json({
-          error: "Ollama returned invalid JSON."
-        });
-      }
-
-      const reply = parsed.reply || "How can I help you?";
-      await saveRecommendationHistory({
+      await saveAssistantHistory({
         userId,
         prompt,
         reply,
@@ -656,6 +788,7 @@ Message: ${prompt}
       });
 
       return res.json({
+        mode: "assistant",
         reply,
         recommendations: []
       });
@@ -664,66 +797,26 @@ Message: ${prompt}
     const candidateMovies = getCandidateMovies(prompt);
     const movieTitles = candidateMovies.map(movie => movie.title);
 
-    const recommendPrompt = `
-You are a smart movie assistant.
-
-The user is asking for movie recommendations.
-
-Rules:
-1. Recommend only from the movie titles below.
-2. "title" must be an exact title from the list.
-3. Return at most 3 recommendations.
-4. Keep reply natural and simple.
-5. Return JSON only.
-
-Use exactly this format:
-{
-  "reply": "short helpful reply",
-  "recommendations": [
-    {
-      "title": "exact movie title",
-      "why": "short reason"
-    }
-  ]
-}
-
-Movie titles:
-${JSON.stringify(movieTitles, null, 2)}
-
-User: ${username || "Guest"}
-Request: ${prompt}
-    `.trim();
-
-    const ollamaResponse = await fetch(OLLAMA_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
+    const content = await askOllama([
+      {
+        role: "system",
+        content: `You are the movie recommendation mode of Smart Assistant.
+Recommend only exact titles from the supplied catalog.
+Return at most 3 recommendations.
+Return JSON with this exact shape:
+{"reply":"short helpful reply","recommendations":[{"title":"exact catalog title","why":"short reason"}]}`
       },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt: recommendPrompt,
-        stream: false,
-        format: "json"
-      })
-    });
+      ...conversation,
+      {
+        role: "user",
+        content: `User: ${username || "Guest"}
+Request: ${prompt}
 
-    if (!ollamaResponse.ok) {
-      const errorText = await ollamaResponse.text();
-      return res.status(500).json({
-        error: "Ollama request failed: " + errorText
-      });
-    }
-
-    const data = await ollamaResponse.json();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(data.response);
-    } catch (err) {
-      return res.status(500).json({
-        error: "Ollama returned invalid JSON."
-      });
-    }
+Available movie titles:
+${JSON.stringify(movieTitles)}`
+      }
+    ], { format: "json", temperature: 0.2, numPredict: 300 });
+    const parsed = parseOllamaJson(content);
 
     const recommendations = (parsed.recommendations || [])
       .map(item => {
@@ -746,7 +839,7 @@ Request: ${prompt}
       .filter(Boolean);
 
     const reply = parsed.reply || "Here are some movie recommendations.";
-    await saveRecommendationHistory({
+    await saveAssistantHistory({
       userId,
       prompt,
       reply,
@@ -754,13 +847,14 @@ Request: ${prompt}
     });
 
     return res.json({
+      mode: "movies",
       reply,
       recommendations
     });
   } catch (error) {
     console.error("SERVER ERROR:", error);
     res.status(500).json({
-      error: "Could not connect to Ollama."
+      error: error.message || "Could not connect to Ollama."
     });
   }
 });
@@ -783,19 +877,21 @@ async function startServer() {
     await initializeDatabase();
     await ensureAdminUser();
     await refreshMovies();
+    databaseConnected = true;
 
     console.log(
       `MYSQL DATABASE: ${databaseConfig.database} at ${databaseConfig.host}:${databaseConfig.port}`
     );
-    console.log("TOTAL MOVIES LOADED:", movies.length);
-
-    app.listen(port, () => {
-      console.log(`Server running on http://localhost:${port}`);
-    });
   } catch (error) {
-    console.error("Could not start the MySQL database connection:", error.message);
-    process.exit(1);
+    databaseConnected = false;
+    movies = loadLocalMovies();
+    console.warn("MySQL is unavailable. Starting with the local movie catalog:", error.message);
   }
+
+  console.log("TOTAL MOVIES LOADED:", movies.length);
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
 }
 
 startServer();

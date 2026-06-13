@@ -83,13 +83,13 @@
     <div class="hero-content">
       <div class="hero-copy">
         <h1>Discover your next movie night</h1>
-        <p>Ask for a mood, genre, actor, or story style and get smarter recommendations from the movie collection.</p>
+        <p>Ask any question, or request a movie by mood, genre, actor, or story style.</p>
 
         <div class="search-box">
           <input
             type="text"
             id="userInput"
-            placeholder="Try: action, romance, emotional, marvel..."
+            placeholder="Ask anything, or try: recommend an action movie"
           />
           <button id="sendBtn">Ask AI</button>
         </div>
@@ -119,28 +119,23 @@
   </section>
 
   <main class="main-content">
-    <section class="chat-panel glass-card">
-      <div class="section-head">
-        <h2>AI Assistant</h2>
-        <span class="section-sub">Personalized suggestions</span>
-      </div>
-
-      <div class="chat-box" id="chatBox">
-        <div class="message bot">
-          Hello! Tell me what kind of movie you want, and I will recommend the best new release movies for you.
+    <section class="recommendation-panel glass-card">
+      <div class="panel-top">
+        <div>
+          <h2>Movie Releases 2004 - 2026</h2>
+          <p class="panel-note">Browse the latest movies and search by title or keywords.</p>
         </div>
       </div>
 
-      <div class="chat-composer">
-        <input
-          type="text"
-          id="chatInput"
-          placeholder="Ask anything..."
-        />
-        <button id="chatSendBtn" type="button">Send</button>
+      <div class="movie-grid" id="movieGrid">
+        <div class="empty-state">Loading new release movies...</div>
       </div>
 
-      <div class="wishlist-panel" id="wishlistPanel">
+      <div class="pagination" id="pagination"></div>
+    </section>
+
+    <section class="wishlist-panel wishlist-home-panel glass-card" id="wishlistPanel">
+      <div class="wishlist-home-inner">
         <div class="wishlist-head">
           <h3>Wishlist</h3>
           <span id="wishlistCount">0 saved</span>
@@ -150,23 +145,49 @@
         </div>
       </div>
     </section>
-
-    <section class="recommendation-panel glass-card">
-      <div class="panel-top">
-        <div>
-          <h2>Movie Releases 2004 - 2026</h2>
-          <p class="panel-note">Browse the latest movies and search by title or keywords.</p>
-        </div>
-
-      </div>
-
-      <div class="movie-grid" id="movieGrid">
-        <div class="empty-state">Loading new release movies...</div>
-      </div>
-
-      <div class="pagination" id="pagination"></div>
-    </section>
   </main>
+
+  <button
+    class="floating-ai-button"
+    id="aiAssistantToggle"
+    type="button"
+    aria-controls="aiAssistantPanel"
+    aria-expanded="false"
+    aria-label="Open AI Assistant"
+  >
+    <span class="floating-ai-mark" aria-hidden="true">AI</span>
+    <span>AI Assistant</span>
+  </button>
+
+  <section
+    class="chat-panel floating-chat glass-card"
+    id="aiAssistantPanel"
+    aria-hidden="true"
+    aria-labelledby="aiAssistantTitle"
+  >
+    <div class="section-head floating-chat-head">
+      <div>
+        <h2 id="aiAssistantTitle">AI Assistant</h2>
+        <span class="section-sub">Personalized suggestions</span>
+      </div>
+      <button class="floating-chat-close" id="aiAssistantClose" type="button" aria-label="Close AI Assistant">&times;</button>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+      <div class="message bot">
+        Hello! I am your AI assistant. Ask me anything, or ask for a movie recommendation.
+      </div>
+    </div>
+
+    <div class="chat-composer">
+      <input
+        type="text"
+        id="chatInput"
+        placeholder="Ask anything..."
+      />
+      <button id="chatSendBtn" type="button">Send</button>
+    </div>
+  </section>
 
   <div class="settings-overlay" id="profileModal">
     <div class="settings-card">
@@ -324,7 +345,7 @@
     </div>
   </div>
 
-  <script src="trailer.js"></script>
+  <script src="trailer.js?v=3"></script>
   <script src="movieData.js"></script>
   <script src="script.js"></script>
 </body>

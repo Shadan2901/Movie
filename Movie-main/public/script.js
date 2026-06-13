@@ -16,6 +16,9 @@ const resetFiltersBtn = document.getElementById("resetFiltersBtn");
 const pagination = document.getElementById("pagination");
 const wishlistCount = document.getElementById("wishlistCount");
 const wishlistList = document.getElementById("wishlistList");
+const aiAssistantToggle = document.getElementById("aiAssistantToggle");
+const aiAssistantPanel = document.getElementById("aiAssistantPanel");
+const aiAssistantClose = document.getElementById("aiAssistantClose");
 
 const burgerBtn = document.getElementById("burgerBtn");
 const navMenu = document.getElementById("navMenu");
@@ -62,6 +65,8 @@ let currentSort = "newest";
 let totalPagesGlobal = 1;
 let aiBusy = false;
 let wishlist = [];
+let assistantConversation = [];
+let suppressMovieGridClick = false;
 const limit = 15;
 const localMovies = Array.isArray(window.LOCAL_MOVIES) ? window.LOCAL_MOVIES : [];
 const genreNames = {
@@ -114,6 +119,18 @@ function addMessage(text, sender) {
   chatBox.appendChild(msg);
   chatBox.scrollTop = chatBox.scrollHeight;
   return msg;
+}
+
+function setAssistantOpen(isOpen, focusInput = false) {
+  aiAssistantPanel.classList.toggle("show", isOpen);
+  aiAssistantPanel.setAttribute("aria-hidden", String(!isOpen));
+  aiAssistantToggle.setAttribute("aria-expanded", String(isOpen));
+  aiAssistantToggle.setAttribute("aria-label", isOpen ? "Close AI Assistant" : "Open AI Assistant");
+  aiAssistantToggle.classList.toggle("active", isOpen);
+
+  if (isOpen && focusInput) {
+    window.setTimeout(() => chatInput.focus(), 180);
+  }
 }
 
 function setAiBusy(isBusy) {
@@ -562,12 +579,13 @@ function renderWishlist() {
     const fallback = escapeHtml(posterFallbacks[index % posterFallbacks.length]);
     const key = escapeHtml(getMovieKey(movie));
     const trailerUrl = escapeHtml(getTrailerUrl(movie));
+    const trailerId = escapeHtml(movie.id || "");
     const trailerTitle = escapeHtml(movie.title || "Movie");
     const trailerYear = escapeHtml(movie.year || "");
 
     return `
       <div class="wishlist-item">
-        <a class="wishlist-poster-link" href="${trailerUrl}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
+        <a class="wishlist-poster-link" href="${trailerUrl}" data-trailer-id="${trailerId}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
           <img src="${poster}" alt="${title}" onerror="this.onerror=null; this.src='${fallback}';">
         </a>
         <div>
@@ -642,6 +660,7 @@ function renderMovies(items) {
     const fallback = escapeHtml(posterFallbacks[index % posterFallbacks.length]);
     const movieKey = escapeHtml(getMovieKey(item));
     const trailerUrl = escapeHtml(getTrailerUrl(item));
+    const trailerId = escapeHtml(item.id || "");
     const trailerTitle = escapeHtml(item.title || "Movie");
     const trailerYear = escapeHtml(item.year || "");
     const movieData = escapeHtml(JSON.stringify({
@@ -657,7 +676,7 @@ function renderMovies(items) {
     return `
       <div class="movie-card">
         <div class="poster-wrap">
-          <a class="poster-link" href="${trailerUrl}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
+          <a class="poster-link" href="${trailerUrl}" data-trailer-id="${trailerId}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
             <img src="${poster}" alt="${title}" class="poster" onerror="this.onerror=null; this.src='${fallback}';">
           </a>
           <button
@@ -784,37 +803,15 @@ async function loadMovies() {
   }
 }
 
-function isLikelyMovieRequest(text) {
-  const cleanText = text.toLowerCase();
-  const keywords = [
-    "recommend",
-    "movie",
-    "movies",
-    "watch",
-    "suggest",
-    "film",
-    "action movie",
-    "romance movie",
-    "comedy movie",
-    "horror movie",
-    "thriller movie",
-    "marvel",
-    "spider-man",
-    "batman",
-    "best movie"
-  ];
-
-  return keywords.some(keyword => cleanText.includes(keyword));
-}
-
 async function askAI(sourceInput = input) {
   if (aiBusy) return;
 
   const userText = sourceInput.value.trim();
   if (userText === "") return;
 
-  const movieRequest = isLikelyMovieRequest(userText);
-  addMessage(userText, "user");
+  setAssistantOpen(true);
+  const history = assistantConversation.slice(-10);
+  addMessage(escapeHtml(userText), "user");
   sourceInput.value = "";
 
   if (location.protocol === "file:") {
@@ -826,10 +823,6 @@ async function askAI(sourceInput = input) {
   const thinkingMessage = addMessage("Ollama is thinking...", "bot");
   thinkingMessage.classList.add("thinking");
 
-  if (movieRequest) {
-    movieGrid.innerHTML = `<div class="loading">Ollama is thinking...</div>`;
-  }
-
   try {
     const response = await fetch("/api/recommend", {
       method: "POST",
@@ -839,7 +832,8 @@ async function askAI(sourceInput = input) {
       body: JSON.stringify({
         prompt: userText,
         username: currentUser ? getDisplayName() : "guest",
-        userId: currentUser?.id || null
+        userId: currentUser?.id || null,
+        history
       })
     });
 
@@ -850,22 +844,24 @@ async function askAI(sourceInput = input) {
     }
 
     thinkingMessage.remove();
-    addMessage(data.reply || "How can I help you?", "bot");
+    const reply = data.reply || "How can I help you?";
+    assistantConversation.push(
+      { role: "user", content: userText },
+      { role: "assistant", content: reply }
+    );
+    assistantConversation = assistantConversation.slice(-10);
+    addMessage(escapeHtml(reply).replace(/\n/g, "<br>"), "bot");
 
     if (data.recommendations && data.recommendations.length > 0) {
       renderMovies(data.recommendations);
       pagination.innerHTML = "";
-    } else if (movieRequest) {
+    } else if (data.mode === "movies") {
       movieGrid.innerHTML = `<div class="empty-state">No recommended movies matched your request.</div>`;
     }
 
   } catch (error) {
     thinkingMessage.remove();
     addMessage("Error: " + error.message, "bot");
-
-    if (movieRequest) {
-      movieGrid.innerHTML = `<div class="empty-state">Failed to load AI recommendation.</div>`;
-    }
   } finally {
     setAiBusy(false);
     sourceInput.focus();
@@ -891,6 +887,70 @@ chatInput.addEventListener("keydown", function (event) {
     askAI(chatInput);
   }
 });
+
+aiAssistantToggle.addEventListener("click", function () {
+  setAssistantOpen(!aiAssistantPanel.classList.contains("show"), true);
+});
+
+aiAssistantClose.addEventListener("click", function () {
+  setAssistantOpen(false);
+  aiAssistantToggle.focus();
+});
+
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape" && aiAssistantPanel.classList.contains("show")) {
+    setAssistantOpen(false);
+    aiAssistantToggle.focus();
+  }
+});
+
+function enableMovieRailDragging() {
+  let pointerId = null;
+  let startX = 0;
+  let startScrollLeft = 0;
+  let moved = false;
+
+  movieGrid.addEventListener("pointerdown", function (event) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (event.target.closest("button")) return;
+
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startScrollLeft = movieGrid.scrollLeft;
+    moved = false;
+    movieGrid.classList.add("dragging");
+    movieGrid.setPointerCapture(pointerId);
+  });
+
+  movieGrid.addEventListener("pointermove", function (event) {
+    if (event.pointerId !== pointerId) return;
+
+    const distance = event.clientX - startX;
+    if (Math.abs(distance) > 6) moved = true;
+    movieGrid.scrollLeft = startScrollLeft - distance;
+  });
+
+  function finishDragging(event) {
+    if (event.pointerId !== pointerId) return;
+
+    suppressMovieGridClick = moved;
+    movieGrid.classList.remove("dragging");
+    if (movieGrid.hasPointerCapture(pointerId)) {
+      movieGrid.releasePointerCapture(pointerId);
+    }
+    pointerId = null;
+  }
+
+  movieGrid.addEventListener("pointerup", finishDragging);
+  movieGrid.addEventListener("pointercancel", finishDragging);
+
+  movieGrid.addEventListener("click", function (event) {
+    if (!suppressMovieGridClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressMovieGridClick = false;
+  }, true);
+}
 
 movieSearch.addEventListener("input", function () {
   currentSearch = movieSearch.value.trim();
@@ -975,6 +1035,7 @@ async function initializePage() {
   await loadWishlist();
   renderWishlist();
   populateFilterOptions();
+  enableMovieRailDragging();
   loadMovies();
 }
 

@@ -85,13 +85,14 @@ function renderWishlistPage() {
     const fallback = escapeHtml(posterFallbacks[index % posterFallbacks.length]);
     const key = escapeHtml(getMovieKey(movie));
     const trailerUrl = escapeHtml(getTrailerUrl(movie));
+    const trailerId = escapeHtml(movie.id || "");
     const trailerTitle = escapeHtml(movie.title || "Movie");
     const trailerYear = escapeHtml(movie.year || "");
 
     return `
       <article class="wishlist-page-card">
         <div class="wishlist-page-poster">
-          <a class="wishlist-page-poster-link" href="${trailerUrl}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
+          <a class="wishlist-page-poster-link" href="${trailerUrl}" data-trailer-id="${trailerId}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}" aria-label="Play ${title} trailer">
             <img src="${poster}" alt="${title}" onerror="this.onerror=null; this.src='${fallback}';">
           </a>
         </div>

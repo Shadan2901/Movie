@@ -7,7 +7,7 @@ dotenv.config();
 
 const databaseConfig = {
   host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT) || 3307,
+  port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "movie"
@@ -72,6 +72,18 @@ function fromDatabaseMovie(row) {
     description: row.description,
     popularity: Number(row.popularity || 0)
   };
+}
+
+function moviesMatch(existing, incoming) {
+  return (
+    String(existing.title || "") === String(incoming.title || "") &&
+    String(existing.year || "") === String(incoming.year || "") &&
+    String(existing.rating || "") === String(incoming.rating || "") &&
+    JSON.stringify(existing.genre_ids || []) === JSON.stringify(incoming.genre_ids || []) &&
+    String(existing.poster || "") === String(incoming.poster || "") &&
+    String(existing.description || "") === String(incoming.description || "") &&
+    Number(existing.popularity || 0) === Number(incoming.popularity || 0)
+  );
 }
 
 async function createSchema() {
@@ -329,6 +341,98 @@ async function createMovie(movie) {
 
   await syncMovieGenres(movie);
   return getMovieById(movie.id);
+}
+
+async function upsertMovies(movieList) {
+  const uniqueMovies = [...new Map(
+    (movieList || [])
+      .filter(movie => movie && movie.id && movie.title && movie.year)
+      .map(movie => [String(movie.id), movie])
+  ).values()];
+
+  if (uniqueMovies.length === 0) {
+    return { fetched: 0, added: 0, updated: 0, unchanged: 0 };
+  }
+
+  const ids = uniqueMovies.map(movie => String(movie.id));
+  const [existingRows] = await pool.query(
+    "SELECT * FROM movies WHERE id IN (?)",
+    [ids]
+  );
+  const existingById = new Map(
+    existingRows.map(row => [String(row.id), fromDatabaseMovie(row)])
+  );
+
+  let added = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const movie of uniqueMovies) {
+    const existing = existingById.get(String(movie.id));
+    if (!existing) {
+      added += 1;
+    } else if (moviesMatch(existing, movie)) {
+      unchanged += 1;
+    } else {
+      updated += 1;
+    }
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    for (let index = 0; index < uniqueMovies.length; index += 100) {
+      const batch = uniqueMovies.slice(index, index + 100);
+      await connection.query(`
+        INSERT INTO movies (
+          id, title, year, rating, genre_ids, poster, description, popularity
+        ) VALUES ?
+        ON DUPLICATE KEY UPDATE
+          title = VALUES(title),
+          year = VALUES(year),
+          rating = VALUES(rating),
+          genre_ids = VALUES(genre_ids),
+          poster = VALUES(poster),
+          description = VALUES(description),
+          popularity = VALUES(popularity)
+      `, [batch.map(toDatabaseMovie)]);
+    }
+
+    await connection.query(
+      "DELETE FROM movie_genres WHERE movie_id IN (?)",
+      [ids]
+    );
+
+    const genreLinks = uniqueMovies.flatMap(movie =>
+      (movie.genre_ids || [])
+        .map(Number)
+        .filter(genreId => GENRE_NAMES[genreId])
+        .map(genreId => [String(movie.id), genreId])
+    );
+
+    for (let index = 0; index < genreLinks.length; index += 500) {
+      await connection.query(
+        "INSERT IGNORE INTO movie_genres (movie_id, genre_id) VALUES ?",
+        [genreLinks.slice(index, index + 500)]
+      );
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return {
+    fetched: uniqueMovies.length,
+    added,
+    updated,
+    unchanged
+  };
 }
 
 async function updateMovie(movie) {
@@ -596,6 +700,7 @@ module.exports = {
   initializeDatabase,
   getAllMovies,
   createMovie,
+  upsertMovies,
   updateMovie,
   deleteMovie,
   createUser,

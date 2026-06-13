@@ -12,6 +12,7 @@ const popularityInput = document.getElementById("popularityInput");
 const posterInput = document.getElementById("posterInput");
 const descriptionInput = document.getElementById("descriptionInput");
 const newMovieBtn = document.getElementById("newMovieBtn");
+const syncMoviesBtn = document.getElementById("syncMoviesBtn");
 const resetFormBtn = document.getElementById("resetFormBtn");
 const adminFeedbackList = document.getElementById("adminFeedbackList");
 
@@ -248,6 +249,26 @@ async function deleteMovie(id) {
   await fetchMovies();
 }
 
+async function syncLatestMovies() {
+  if (!serverMode) {
+    throw new Error("Start the website server before fetching movies.");
+  }
+
+  const response = await fetch("/api/admin/movies/sync-latest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not fetch the latest movies.");
+  }
+
+  await fetchMovies();
+  return data;
+}
+
 movieForm.addEventListener("submit", async function (event) {
   event.preventDefault();
 
@@ -298,6 +319,24 @@ adminSearchInput.addEventListener("input", function () {
 });
 
 newMovieBtn.addEventListener("click", resetForm);
+syncMoviesBtn.addEventListener("click", async function () {
+  try {
+    syncMoviesBtn.disabled = true;
+    syncMoviesBtn.textContent = "Fetching...";
+    setStatus("Checking TMDB for new movies...");
+
+    const result = await syncLatestMovies();
+    setStatus(
+      `${result.added} new, ${result.updated} updated, ` +
+      `${result.unchanged} unchanged`
+    );
+  } catch (error) {
+    setStatus(error.message);
+  } finally {
+    syncMoviesBtn.disabled = false;
+    syncMoviesBtn.textContent = "Fetch Latest Movies";
+  }
+});
 resetFormBtn.addEventListener("click", resetForm);
 
 fetchMovies();

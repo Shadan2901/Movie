@@ -3,7 +3,7 @@
 The project connects to the local MySQL/MariaDB server with:
 
 - Host: `127.0.0.1`
-- Port: `3307`
+- Port: `3306`
 - Database: `movie`
 - Username: `root`
 - Password: empty
@@ -55,3 +55,26 @@ The default admin account is:
 - Password: `admin123`
 
 Application passwords are stored as salted hashes.
+
+## Fetch the latest movies
+
+The Admin Dashboard has a **Fetch Latest Movies** button. It reads the current
+theatrical movie list from TMDB, updates matching TMDB records, and adds movies
+whose TMDB IDs are not already in MySQL.
+
+Create a TMDB API credential and add one of these values to `.env`:
+
+```env
+TMDB_ACCESS_TOKEN=your_tmdb_api_read_access_token
+# Or use a v3 key:
+TMDB_API_KEY=your_tmdb_v3_api_key
+
+TMDB_REGION=MY
+TMDB_SYNC_PAGES=5
+```
+
+You can also run the same update from the terminal:
+
+```powershell
+npm run sync:movies
+```
