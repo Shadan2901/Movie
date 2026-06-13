@@ -245,22 +245,47 @@ select {
   position: relative;
 }
 
-.top-search-control::before {
-  content: "Find";
+.search-filter-toggle {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 62px;
-  display: grid;
-  place-items: center;
+  z-index: 2;
+  width: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: #f2f2f2;
   color: #111;
   border-radius: var(--radius) 0 0 var(--radius);
+  border: 0;
   border-right: 1px solid #d7d7d7;
   font-size: 14px;
   font-weight: 900;
-  pointer-events: none;
+}
+
+.search-filter-toggle:hover,
+.search-filter-toggle[aria-expanded="true"] {
+  background: var(--yellow);
+}
+
+.search-filter-toggle:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: -3px;
+}
+
+.search-filter-chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.16s ease;
+}
+
+.search-filter-toggle[aria-expanded="true"] .search-filter-chevron {
+  transform: translateY(2px) rotate(225deg);
 }
 
 .movie-search-input {
@@ -270,7 +295,7 @@ select {
   border-radius: var(--radius);
   background: #ffffff;
   color: #111111;
-  padding: 0 16px 0 78px;
+  padding: 0 16px 0 94px;
   outline: none;
   font-size: 15px;
 }
@@ -283,11 +308,24 @@ select {
   box-shadow: 0 0 0 3px var(--yellow);
 }
 
-.top-filter-bar {
-  grid-column: 2;
-  display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(112px, 0.7fr) minmax(150px, 1fr) 84px;
+.top-filter-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  width: min(650px, 100%);
+  display: none;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(170px, 1fr) 84px;
   gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius);
+  background: #181818;
+  box-shadow: var(--shadow);
+}
+
+.top-filter-menu.show {
+  display: grid;
 }
 
 .top-filter-select,
@@ -436,10 +474,32 @@ select {
 
 .poster-tile {
   position: absolute;
-  object-fit: cover;
+  display: block;
+  overflow: hidden;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   background: #222;
+}
+
+.hero-poster-link {
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.hero-poster-link img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.hero-poster-link:hover {
+  filter: brightness(1.08);
+}
+
+.hero-poster-link:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 4px;
 }
 
 .poster-main {
@@ -450,11 +510,19 @@ select {
   z-index: 2;
 }
 
+.poster-main:hover {
+  transform: translateY(-5px);
+}
+
 .poster-side {
   width: 150px;
   height: 216px;
   right: 0;
   opacity: 0.88;
+}
+
+.poster-side:hover {
+  transform: translateY(-4px);
 }
 
 .poster-side.top {
@@ -805,43 +873,12 @@ select {
 
 .movie-grid {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(180px, 210px);
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 18px;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scroll-behavior: smooth;
-  scroll-snap-type: inline mandatory;
-  scrollbar-color: var(--yellow) var(--surface-3);
-  scrollbar-width: thin;
-  cursor: grab;
-  touch-action: pan-y;
-  user-select: none;
-  padding: 4px 2px 16px;
-}
-
-.movie-grid.dragging {
-  cursor: grabbing;
-  scroll-behavior: auto;
-  scroll-snap-type: none;
-}
-
-.movie-grid::-webkit-scrollbar {
-  height: 9px;
-}
-
-.movie-grid::-webkit-scrollbar-track {
-  background: var(--surface-3);
-}
-
-.movie-grid::-webkit-scrollbar-thumb {
-  border-radius: 4px;
-  background: var(--yellow);
+  padding: 4px 2px;
 }
 
 .movie-card {
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
   overflow: hidden;
   background: var(--surface-2);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1705,10 +1742,6 @@ select {
     gap: 10px;
   }
 
-  .top-filter-bar {
-    grid-column: 1;
-  }
-
   .top-search-inner h2 {
     font-size: 20px;
   }
@@ -1751,6 +1784,10 @@ select {
     transform: translateX(-50%);
   }
 
+  .poster-main:hover {
+    transform: translateX(-50%) translateY(-5px);
+  }
+
   .poster-side {
     width: 105px;
     height: 152px;
@@ -1765,7 +1802,7 @@ select {
   }
 
   .movie-grid {
-    grid-auto-columns: minmax(170px, 42vw);
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   }
 
   .settings-card {
@@ -1812,15 +1849,8 @@ select {
     width: 54px;
   }
 
-  .top-search-control::before {
-    display: none;
-  }
-
-  .movie-search-input {
-    padding-left: 14px;
-  }
-
-  .top-filter-bar {
+  .top-filter-menu {
+    width: 100%;
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1852,7 +1882,7 @@ select {
   }
 
   .movie-grid {
-    grid-auto-columns: minmax(150px, 72vw);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
 

@@ -204,13 +204,27 @@
   min-width: 260px;
 }
 
+.admin-poster-link,
 .admin-movie-cell img {
   width: 42px;
   height: 62px;
   flex: 0 0 auto;
   border-radius: 4px;
+}
+
+.admin-poster-link {
+  display: block;
+}
+
+.admin-poster-link img {
+  display: block;
   object-fit: cover;
   background: #222;
+}
+
+.admin-poster-link:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 3px;
 }
 
 .admin-movie-cell strong,

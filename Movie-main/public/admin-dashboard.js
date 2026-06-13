@@ -147,12 +147,27 @@ function renderMovies(totalOverride) {
   adminMovieTable.innerHTML = visibleMovies.map((movie, index) => {
     const poster = escapeHtml(getPoster(movie, index));
     const fallback = escapeHtml(fallbackPosters[index % fallbackPosters.length]);
+    const trailerId = escapeHtml(movie.id || "");
+    const trailerTitle = escapeHtml(movie.title || "Movie");
+    const trailerYear = escapeHtml(movie.year || "");
+    const trailerUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+      `${movie.title || "movie"} ${movie.year || ""} official trailer`.trim()
+    )}`;
 
     return `
       <tr>
         <td>
           <div class="admin-movie-cell">
-            <img src="${poster}" alt="${escapeHtml(movie.title)}" onerror="this.onerror=null; this.src='${fallback}';">
+            <a
+              class="admin-poster-link"
+              href="${trailerUrl}"
+              data-trailer-id="${trailerId}"
+              data-trailer-title="${trailerTitle}"
+              data-trailer-year="${trailerYear}"
+              aria-label="Play ${trailerTitle} trailer"
+            >
+              <img src="${poster}" alt="${trailerTitle}" onerror="this.onerror=null; this.src='${fallback}';">
+            </a>
             <div>
               <strong>${escapeHtml(movie.title)}</strong>
               <p>${escapeHtml(movie.description || "No description.").slice(0, 110)}</p>

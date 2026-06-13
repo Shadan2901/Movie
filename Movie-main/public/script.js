@@ -13,6 +13,8 @@ const genreFilter = document.getElementById("genreFilter");
 const yearFilter = document.getElementById("yearFilter");
 const sortFilter = document.getElementById("sortFilter");
 const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+const filterMenuToggle = document.getElementById("filterMenuToggle");
+const filterMenu = document.getElementById("filterMenu");
 const pagination = document.getElementById("pagination");
 const wishlistCount = document.getElementById("wishlistCount");
 const wishlistList = document.getElementById("wishlistList");
@@ -66,7 +68,6 @@ let totalPagesGlobal = 1;
 let aiBusy = false;
 let wishlist = [];
 let assistantConversation = [];
-let suppressMovieGridClick = false;
 const limit = 15;
 const localMovies = Array.isArray(window.LOCAL_MOVIES) ? window.LOCAL_MOVIES : [];
 const genreNames = {
@@ -131,6 +132,12 @@ function setAssistantOpen(isOpen, focusInput = false) {
   if (isOpen && focusInput) {
     window.setTimeout(() => chatInput.focus(), 180);
   }
+}
+
+function setFilterMenuOpen(isOpen) {
+  filterMenu.classList.toggle("show", isOpen);
+  filterMenu.setAttribute("aria-hidden", String(!isOpen));
+  filterMenuToggle.setAttribute("aria-expanded", String(isOpen));
 }
 
 function setAiBusy(isBusy) {
@@ -902,55 +909,27 @@ document.addEventListener("keydown", function (event) {
     setAssistantOpen(false);
     aiAssistantToggle.focus();
   }
+
+  if (event.key === "Escape" && filterMenu.classList.contains("show")) {
+    setFilterMenuOpen(false);
+    filterMenuToggle.focus();
+  }
 });
 
-function enableMovieRailDragging() {
-  let pointerId = null;
-  let startX = 0;
-  let startScrollLeft = 0;
-  let moved = false;
+filterMenuToggle.addEventListener("click", function (event) {
+  event.stopPropagation();
+  setFilterMenuOpen(!filterMenu.classList.contains("show"));
+});
 
-  movieGrid.addEventListener("pointerdown", function (event) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (event.target.closest("button")) return;
+filterMenu.addEventListener("click", function (event) {
+  event.stopPropagation();
+});
 
-    pointerId = event.pointerId;
-    startX = event.clientX;
-    startScrollLeft = movieGrid.scrollLeft;
-    moved = false;
-    movieGrid.classList.add("dragging");
-    movieGrid.setPointerCapture(pointerId);
-  });
-
-  movieGrid.addEventListener("pointermove", function (event) {
-    if (event.pointerId !== pointerId) return;
-
-    const distance = event.clientX - startX;
-    if (Math.abs(distance) > 6) moved = true;
-    movieGrid.scrollLeft = startScrollLeft - distance;
-  });
-
-  function finishDragging(event) {
-    if (event.pointerId !== pointerId) return;
-
-    suppressMovieGridClick = moved;
-    movieGrid.classList.remove("dragging");
-    if (movieGrid.hasPointerCapture(pointerId)) {
-      movieGrid.releasePointerCapture(pointerId);
-    }
-    pointerId = null;
+document.addEventListener("click", function (event) {
+  if (!filterMenu.contains(event.target) && event.target !== filterMenuToggle) {
+    setFilterMenuOpen(false);
   }
-
-  movieGrid.addEventListener("pointerup", finishDragging);
-  movieGrid.addEventListener("pointercancel", finishDragging);
-
-  movieGrid.addEventListener("click", function (event) {
-    if (!suppressMovieGridClick) return;
-    event.preventDefault();
-    event.stopPropagation();
-    suppressMovieGridClick = false;
-  }, true);
-}
+});
 
 movieSearch.addEventListener("input", function () {
   currentSearch = movieSearch.value.trim();
@@ -1035,7 +1014,6 @@ async function initializePage() {
   await loadWishlist();
   renderWishlist();
   populateFilterOptions();
-  enableMovieRailDragging();
   loadMovies();
 }
 

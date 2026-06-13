@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Movie Recommendation</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
   <header class="navbar">
@@ -48,33 +48,43 @@
       </div>
 
       <div class="top-search-control">
+        <button
+          class="search-filter-toggle"
+          id="filterMenuToggle"
+          type="button"
+          aria-controls="filterMenu"
+          aria-expanded="false"
+        >
+          <span>All</span>
+          <span class="search-filter-chevron" aria-hidden="true"></span>
+        </button>
         <input
           type="text"
           id="movieSearch"
           class="movie-search-input"
           placeholder="Search by title, year, genre, or keyword..."
         />
-      </div>
 
-      <div class="top-filter-bar" aria-label="Movie filters">
-        <select id="genreFilter" class="top-filter-select" aria-label="Filter by genre">
-          <option value="">All genres</option>
-        </select>
+        <div class="top-filter-menu" id="filterMenu" aria-label="Movie filters" aria-hidden="true">
+          <select id="genreFilter" class="top-filter-select" aria-label="Filter by genre">
+            <option value="">All genres</option>
+          </select>
 
-        <select id="yearFilter" class="top-filter-select" aria-label="Filter by year">
-          <option value="">All years</option>
-        </select>
+          <select id="yearFilter" class="top-filter-select" aria-label="Filter by year">
+            <option value="">All years</option>
+          </select>
 
-        <select id="sortFilter" class="top-filter-select" aria-label="Sort movies">
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="az">A-Z</option>
-          <option value="za">Z-A</option>
-          <option value="rating">Highest rating</option>
-          <option value="popular">Most popular</option>
-        </select>
+          <select id="sortFilter" class="top-filter-select" aria-label="Sort movies">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="az">A-Z</option>
+            <option value="za">Z-A</option>
+            <option value="rating">Highest rating</option>
+            <option value="popular">Most popular</option>
+          </select>
 
-        <button id="resetFiltersBtn" class="reset-filters-btn" type="button">Reset</button>
+          <button id="resetFiltersBtn" class="reset-filters-btn" type="button">Reset</button>
+        </div>
       </div>
     </div>
   </section>
@@ -111,9 +121,36 @@
       </div>
 
       <div class="hero-showcase" aria-label="Featured movie posters">
-        <img src="images/Spiderman.webp" alt="Spider-man Brand New Day poster" class="poster-tile poster-main" />
-        <img src="images/Doomsday.jpg" alt="Avengers: Doomsday poster" class="poster-tile poster-side top" />
-        <img src="images/Avengers.webp" alt="Avengers: Endgame poster" class="poster-tile poster-side bottom" />
+        <a
+          class="poster-tile poster-main hero-poster-link"
+          href="https://www.youtube.com/results?search_query=Spider-Man%20Brand%20New%20Day%202026%20official%20trailer"
+          data-trailer-id="969681"
+          data-trailer-title="Spider-Man: Brand New Day"
+          data-trailer-year="2026"
+          aria-label="Play Spider-Man: Brand New Day trailer"
+        >
+          <img src="images/Spiderman.webp" alt="Spider-Man: Brand New Day poster" />
+        </a>
+        <a
+          class="poster-tile poster-side top hero-poster-link"
+          href="https://www.youtube.com/results?search_query=Avengers%20Doomsday%202026%20official%20trailer"
+          data-trailer-id="1003596"
+          data-trailer-title="Avengers: Doomsday"
+          data-trailer-year="2026"
+          aria-label="Play Avengers: Doomsday trailer"
+        >
+          <img src="images/Doomsday.jpg" alt="Avengers: Doomsday poster" />
+        </a>
+        <a
+          class="poster-tile poster-side bottom hero-poster-link"
+          href="https://www.youtube.com/results?search_query=Avengers%20Endgame%202019%20official%20trailer"
+          data-trailer-id="299534"
+          data-trailer-title="Avengers: Endgame"
+          data-trailer-year="2019"
+          aria-label="Play Avengers: Endgame trailer"
+        >
+          <img src="images/Avengers.webp" alt="Avengers: Endgame poster" />
+        </a>
       </div>
     </div>
   </section>
@@ -345,8 +382,8 @@
     </div>
   </div>
 
-  <script src="trailer.js?v=3"></script>
+  <script src="trailer.js?v=5"></script>
   <script src="movieData.js"></script>
-  <script src="script.js"></script>
+  <script src="script.js?v=2"></script>
 </body>
 </html>

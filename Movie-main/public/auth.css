@@ -63,10 +63,29 @@
 
 .auth-poster {
   position: absolute;
-  object-fit: cover;
+  display: block;
+  overflow: hidden;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   background: #222;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.auth-poster img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.auth-poster:hover {
+  filter: brightness(1.08);
+  transform: translateY(-4px);
+}
+
+.auth-poster:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 4px;
 }
 
 .auth-poster.main {
