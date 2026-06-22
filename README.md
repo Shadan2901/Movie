@@ -1,4 +1,4 @@
-Smart Movie Recommendation System
+# Smart Movie Recommendation System
 
 A lightweight, machine learning-powered web application built using Python and Streamlit. The system analyzes natural language features (genres, keywords, overview, cast, and crew) from a dataset of 5,000 movies to recommend films based on user selection. It calculates content similarity using natural language processing (NLP) and dynamically fetches movie posters in real-time via The Movie Database (TMDb) API.
 
