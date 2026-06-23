@@ -246,6 +246,28 @@ async function importMoviesIfEmpty() {
   }
 }
 
+async function syncMissingMovies() {
+  if (!fs.existsSync(moviesJsonPath)) return;
+
+  const sourceMovies = JSON.parse(fs.readFileSync(moviesJsonPath, "utf8"));
+  const [rows] = await pool.query("SELECT id FROM movies");
+  const existingIds = new Set(rows.map(row => String(row.id)));
+  const missingMovies = sourceMovies.filter(movie => !existingIds.has(String(movie.id)));
+
+  for (let index = 0; index < missingMovies.length; index += 100) {
+    const batch = missingMovies.slice(index, index + 100).map(toDatabaseMovie);
+    await pool.query(`
+      INSERT IGNORE INTO movies (
+        id, title, year, rating, genre_ids, poster, description, popularity
+      ) VALUES ?
+    `, [batch]);
+  }
+
+  if (missingMovies.length > 0) {
+    console.log(`Restored ${missingMovies.length} missing movies from the source catalog.`);
+  }
+}
+
 async function syncGenres() {
   const genreRows = Object.entries(GENRE_NAMES).map(([id, name]) => [Number(id), name]);
   await pool.query(
@@ -253,10 +275,12 @@ async function syncGenres() {
     [genreRows]
   );
 
-  const [countRows] = await pool.query("SELECT COUNT(*) AS total FROM movie_genres");
-  if (Number(countRows[0].total) > 0) return;
-
-  const [movieRows] = await pool.query("SELECT id, genre_ids FROM movies");
+  const [movieRows] = await pool.query(`
+    SELECT movies.id, movies.genre_ids
+    FROM movies
+    LEFT JOIN movie_genres ON movie_genres.movie_id = movies.id
+    WHERE movie_genres.movie_id IS NULL
+  `);
   const links = [];
 
   for (const movie of movieRows) {
@@ -319,6 +343,7 @@ async function initializeDatabase() {
 
   await createSchema();
   await importMoviesIfEmpty();
+  await syncMissingMovies();
   await syncGenres();
 }
 
