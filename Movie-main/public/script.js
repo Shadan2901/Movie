@@ -47,8 +47,6 @@ const settingsTitle = document.getElementById("settingsTitle");
 const settingsItems = document.querySelectorAll(".settings-item");
 const settingsPanels = document.querySelectorAll(".settings-panel");
 const profileImageInput = document.getElementById("profileImageInput");
-const languageInputs = document.querySelectorAll("input[name='language']");
-const languagePreview = document.getElementById("languagePreview");
 const feedbackTypeInput = document.getElementById("feedbackTypeInput");
 const feedbackMessageInput = document.getElementById("feedbackMessageInput");
 const feedbackList = document.getElementById("feedbackList");
@@ -99,18 +97,10 @@ const posterFallbacks = [
   "images/Hangover.jpg",
   "images/about.jpg"
 ];
-const languageNames = {
-  en: "English",
-  ms: "Bahasa Melayu",
-  zh: "Chinese",
-  ta: "Tamil"
-};
 const settingsTitles = {
   profile: "Edit profile",
-  language: "Language",
   feedback: "Feedback",
-  admin: "Admin verification",
-  help: "Help"
+  admin: "Admin verification"
 };
 
 function addMessage(text, sender) {
@@ -228,16 +218,6 @@ function updateAuthUI() {
   }
 }
 
-function getSelectedLanguage() {
-  const selected = Array.from(languageInputs).find(inputItem => inputItem.checked);
-  return selected ? selected.value : "en";
-}
-
-function updateLanguagePreview(language) {
-  const selectedLanguage = language || getSelectedLanguage();
-  languagePreview.textContent = `Language selected: ${languageNames[selectedLanguage] || "English"}`;
-}
-
 async function renderFeedbackList() {
   try {
     const query = currentUser?.id ? `?userId=${encodeURIComponent(currentUser.id)}` : "";
@@ -276,11 +256,10 @@ function switchSettingsTab(tab) {
     panel.classList.toggle("active", panelTab === tab);
   });
 
-  saveProfileBtn.style.display = tab === "help" ? "none" : "inline-flex";
-  cancelProfileBtn.textContent = tab === "help" ? "Close" : "Cancel";
+  saveProfileBtn.style.display = "inline-flex";
+  cancelProfileBtn.textContent = "Cancel";
 
   if (tab === "profile") saveProfileBtn.textContent = "Save";
-  if (tab === "language") saveProfileBtn.textContent = "Save Language";
   if (tab === "feedback") saveProfileBtn.textContent = "Submit Feedback";
   if (tab === "admin") saveProfileBtn.textContent = "Verify Admin";
   if (tab === "feedback") renderFeedbackList();
@@ -301,11 +280,6 @@ function openProfileModal() {
   pendingProfilePhoto = currentUser.photo || "";
   originalProfileEmail = currentUser.email || "";
 
-  const savedLanguage = currentUser.language || localStorage.getItem("smartLanguage") || "en";
-  languageInputs.forEach(inputItem => {
-    inputItem.checked = inputItem.value === savedLanguage;
-  });
-  updateLanguagePreview(savedLanguage);
   renderFeedbackList();
   applyAvatar(profilePreviewAvatar, getAvatarLetter(), pendingProfilePhoto);
   profileModal.classList.add("show");
@@ -357,12 +331,6 @@ settingsItems.forEach(item => {
   });
 });
 
-languageInputs.forEach(inputItem => {
-  inputItem.addEventListener("change", function () {
-    updateLanguagePreview(inputItem.value);
-  });
-});
-
 profileImageInput.addEventListener("change", function () {
   const file = profileImageInput.files && profileImageInput.files[0];
   if (!file) return;
@@ -394,20 +362,6 @@ saveProfileBtn.addEventListener("click", async function () {
       updateAuthUI();
       closeProfileEditor();
       addMessage("Profile updated successfully.", "bot");
-    } catch (error) {
-      addMessage(error.message, "bot");
-    }
-    return;
-  }
-
-  if (currentSettingsTab === "language") {
-    const selectedLanguage = getSelectedLanguage();
-    currentUser.language = selectedLanguage;
-    localStorage.setItem("smartLanguage", selectedLanguage);
-    try {
-      await saveCurrentUser();
-      updateLanguagePreview(selectedLanguage);
-      addMessage(`Language saved: ${languageNames[selectedLanguage] || "English"}.`, "bot");
     } catch (error) {
       addMessage(error.message, "bot");
     }

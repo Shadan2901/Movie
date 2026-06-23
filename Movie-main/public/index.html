@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Movie Recommendation</title>
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
   <header class="navbar">
@@ -232,10 +232,8 @@
         <div class="settings-title">Settings</div>
 
         <button class="settings-item active" data-settings-tab="profile">Edit profile</button>
-        <button class="settings-item" data-settings-tab="language">Language</button>
         <button class="settings-item" data-settings-tab="feedback">Feedback</button>
         <button class="settings-item" data-settings-tab="admin">Admin</button>
-        <button class="settings-item" data-settings-tab="help">Help</button>
       </div>
 
       <div class="settings-content">
@@ -299,29 +297,6 @@
           </div>
         </section>
 
-        <section class="settings-panel" id="settingsPanelLanguage">
-          <p class="profile-small-text">Choose your preferred app language.</p>
-          <div class="settings-option-grid">
-            <label class="settings-option">
-              <input type="radio" name="language" value="en" />
-              <span>English</span>
-            </label>
-            <label class="settings-option">
-              <input type="radio" name="language" value="ms" />
-              <span>Bahasa Melayu</span>
-            </label>
-            <label class="settings-option">
-              <input type="radio" name="language" value="zh" />
-              <span>Chinese</span>
-            </label>
-            <label class="settings-option">
-              <input type="radio" name="language" value="ta" />
-              <span>Tamil</span>
-            </label>
-          </div>
-          <p class="settings-note" id="languagePreview">Language selected: English</p>
-        </section>
-
         <section class="settings-panel" id="settingsPanelFeedback">
           <p class="profile-small-text">Send feedback about the movie app experience.</p>
           <div class="profile-form-grid">
@@ -354,23 +329,6 @@
               <input type="password" id="adminPasswordInput" placeholder="Admin password" />
             </div>
             <p class="settings-note">Demo admin: admin@smartmovies.com / admin123</p>
-          </div>
-        </section>
-
-        <section class="settings-panel" id="settingsPanelHelp">
-          <div class="help-list">
-            <div>
-              <h4>Wishlist</h4>
-              <p>Click the plus button on a movie poster to save it to your wishlist.</p>
-            </div>
-            <div>
-              <h4>AI Assistant</h4>
-              <p>Ask for movie ideas, genres, or normal questions using the chat box.</p>
-            </div>
-            <div>
-              <h4>Admin Dashboard</h4>
-              <p>Use the Admin tab and verify access before managing movie records.</p>
-            </div>
           </div>
         </section>
 

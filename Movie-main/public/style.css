@@ -1448,16 +1448,23 @@ select {
 
 .settings-actions {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
   margin-top: 28px;
 }
 
 .cancel-btn,
 .save-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 100px;
   min-height: 42px;
+  padding: 0 20px;
   border-radius: var(--radius);
   font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .cancel-btn {
@@ -1467,11 +1474,11 @@ select {
 }
 
 .save-btn {
+  min-width: 128px;
   border: 0;
   background: var(--yellow);
   color: #000;
-  align-items: center;
-  justify-content: center;
+  box-shadow: 0 5px 14px rgba(245, 197, 24, 0.24);
 }
 
 .wishlist-body {
@@ -1900,6 +1907,19 @@ select {
 
   .settings-content {
     padding: 28px 20px;
+  }
+
+  .settings-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .cancel-btn,
+  .save-btn {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 12px;
   }
 
   .wishlist-page-grid {
