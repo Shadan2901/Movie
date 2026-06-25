@@ -18,6 +18,8 @@ The default GitHub Pages URL will look like:
 https://shadan2901.github.io/Movie/
 ```
 
+If GitHub Pages serves the repository root, the root `index.html` redirects visitors to the static website inside `public/index.html`.
+
 The GitHub Pages version supports browsing, searching, poster display, trailer links, wishlist, and browser-local register/login. It cannot run `server.js`, MySQL, or Ollama because GitHub Pages only hosts static files.
 
 ## Recommended Full Hosting
