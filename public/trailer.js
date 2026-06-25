@@ -4,12 +4,16 @@ function buildTrailerSearchUrl(title, year) {
 }
 
 function buildTrailerApiUrl(params) {
+  return `/api/trailer?${params.toString()}`;
+}
+
+function usesStaticTrailerFallback() {
   const localHosts = ["localhost", "127.0.0.1"];
-  const usesStaticPreview =
+  return (
     location.protocol === "file:" ||
-    (localHosts.includes(location.hostname) && location.port && location.port !== "3000");
-  const apiOrigin = usesStaticPreview ? "http://localhost:3000" : "";
-  return `${apiOrigin}/api/trailer?${params.toString()}`;
+    location.hostname.endsWith("github.io") ||
+    (localHosts.includes(location.hostname) && location.port && location.port !== "3000")
+  );
 }
 
 function commandTrailerPlayer(frame, command) {
@@ -98,6 +102,10 @@ async function openTrailerModal(title, year, movieId = "") {
   document.body.classList.add("trailer-open");
 
   try {
+    if (usesStaticTrailerFallback()) {
+      throw new Error("Trailer API is not available on this static website.");
+    }
+
     const params = new URLSearchParams({
       id: movieId,
       title,

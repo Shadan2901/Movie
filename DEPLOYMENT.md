@@ -2,9 +2,27 @@
 
 This project is ready to deploy as a Node.js web service.
 
-## Recommended Hosting
+## GitHub Pages
 
-Use Render because the project needs `server.js` for API routes such as login, register, movies, trailers, and recommendations.
+GitHub Pages can host the static website from the `public` folder.
+
+1. Push the latest code to GitHub.
+2. Open the repository on GitHub.
+3. Go to **Settings > Pages**.
+4. Under **Build and deployment**, choose **GitHub Actions**.
+5. The workflow `.github/workflows/pages.yml` will publish the site automatically.
+
+The default GitHub Pages URL will look like:
+
+```text
+https://shadan2901.github.io/Movie/
+```
+
+The GitHub Pages version supports browsing, searching, poster display, trailer links, wishlist, and browser-local register/login. It cannot run `server.js`, MySQL, or Ollama because GitHub Pages only hosts static files.
+
+## Recommended Full Hosting
+
+Use Render when you need the full Node server for API routes such as login, register, movies, trailers, and recommendations.
 
 ## Deploy To Render
 

@@ -103,6 +103,15 @@ const settingsTitles = {
   admin: "Admin verification"
 };
 
+function hasServerApi() {
+  const localHosts = ["localhost", "127.0.0.1"];
+  const isStaticPreview =
+    location.protocol === "file:" ||
+    location.hostname.endsWith("github.io") ||
+    (localHosts.includes(location.hostname) && location.port && location.port !== "3000");
+  return !isStaticPreview;
+}
+
 function addMessage(text, sender) {
   const msg = document.createElement("div");
   msg.classList.add("message", sender);
@@ -449,7 +458,7 @@ function getMovieKey(item) {
 }
 
 async function loadWishlist() {
-  if (currentUser?.id && location.protocol !== "file:") {
+  if (currentUser?.id && hasServerApi()) {
     try {
       const response = await fetch(`/api/users/${encodeURIComponent(currentUser.id)}/wishlist`);
       const data = await response.json();
@@ -573,7 +582,7 @@ async function toggleWishlist(movie) {
   const key = getMovieKey(movie);
   const existingIndex = wishlist.findIndex(savedMovie => getMovieKey(savedMovie) === key);
 
-  if (currentUser?.id && location.protocol !== "file:") {
+  if (currentUser?.id && hasServerApi()) {
     const url = `/api/users/${encodeURIComponent(currentUser.id)}/wishlist`;
     const response = await fetch(
       existingIndex >= 0 ? `${url}/${encodeURIComponent(movie.id)}` : url,
@@ -775,8 +784,8 @@ async function askAI(sourceInput = input) {
   addMessage(escapeHtml(userText), "user");
   sourceInput.value = "";
 
-  if (location.protocol === "file:") {
-    addMessage("Ollama chat needs the local server. Run npm start, make sure Ollama is running, then open http://localhost:3000.", "bot");
+  if (!hasServerApi()) {
+    addMessage("AI Assistant needs the Node server. The GitHub Pages version can browse, search, save wishlist, and open trailers, but AI chat needs the full server deployment.", "bot");
     return;
   }
 
@@ -941,7 +950,7 @@ wishlistList.addEventListener("click", async function (event) {
   const key = button.dataset.wishlistRemove;
   const movie = wishlist.find(savedMovie => getMovieKey(savedMovie) === key);
 
-  if (currentUser?.id && movie?.id && location.protocol !== "file:") {
+  if (currentUser?.id && movie?.id && hasServerApi()) {
     const response = await fetch(
       `/api/users/${encodeURIComponent(currentUser.id)}/wishlist/${encodeURIComponent(movie.id)}`,
       { method: "DELETE" }

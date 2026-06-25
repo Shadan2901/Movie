@@ -42,10 +42,19 @@ function getCurrentUser() {
   }
 }
 
+function hasServerApi() {
+  const localHosts = ["localhost", "127.0.0.1"];
+  const isStaticPreview =
+    location.protocol === "file:" ||
+    location.hostname.endsWith("github.io") ||
+    (localHosts.includes(location.hostname) && location.port && location.port !== "3000");
+  return !isStaticPreview;
+}
+
 async function loadWishlist() {
   currentUser = getCurrentUser();
 
-  if (currentUser?.id && location.protocol !== "file:") {
+  if (currentUser?.id && hasServerApi()) {
     const response = await fetch(`/api/users/${encodeURIComponent(currentUser.id)}/wishlist`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Could not load wishlist.");
@@ -117,7 +126,7 @@ wishlistPageGrid.addEventListener("click", async function (event) {
   const key = button.dataset.removeKey;
   const movie = wishlist.find(item => getMovieKey(item) === key);
 
-  if (currentUser?.id && movie?.id && location.protocol !== "file:") {
+  if (currentUser?.id && movie?.id && hasServerApi()) {
     const response = await fetch(
       `/api/users/${encodeURIComponent(currentUser.id)}/wishlist/${encodeURIComponent(movie.id)}`,
       { method: "DELETE" }
@@ -137,7 +146,7 @@ wishlistPageGrid.addEventListener("click", async function (event) {
 clearWishlistBtn.addEventListener("click", async function () {
   if (!confirm("Remove all movies from your wishlist?")) return;
 
-  if (currentUser?.id && location.protocol !== "file:") {
+  if (currentUser?.id && hasServerApi()) {
     const response = await fetch(
       `/api/users/${encodeURIComponent(currentUser.id)}/wishlist`,
       { method: "DELETE" }
