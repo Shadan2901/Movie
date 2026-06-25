@@ -37,6 +37,7 @@ const OLLAMA_MODEL = "gemma3";
 
 let movies = [];
 let databaseConnected = false;
+const localUsersPath = path.join(__dirname, "data", "local-users.json");
 
 const GENRE_NAMES = {
   12: "Adventure",
@@ -85,7 +86,7 @@ function isValidPassword(password, user) {
 
 function publicUser(user) {
   return {
-    id: Number(user.id),
+    id: user.id,
     firstName: user.first_name,
     lastName: user.last_name,
     email: user.email,
@@ -97,6 +98,116 @@ function publicUser(user) {
     language: user.language || "en",
     photo: user.profile_photo || ""
   };
+}
+
+function readLocalUsers() {
+  if (!fs.existsSync(localUsersPath)) {
+    return [];
+  }
+
+  try {
+    const users = JSON.parse(fs.readFileSync(localUsersPath, "utf8"));
+    return Array.isArray(users) ? users : [];
+  } catch (error) {
+    console.error("Could not read local users:", error.message);
+    return [];
+  }
+}
+
+function writeLocalUsers(users) {
+  fs.mkdirSync(path.dirname(localUsersPath), { recursive: true });
+  fs.writeFileSync(localUsersPath, JSON.stringify(users, null, 2));
+}
+
+function getLocalUserByEmail(email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  return readLocalUsers().find(user => user.email === normalizedEmail) || null;
+}
+
+function getLocalUserById(id) {
+  return readLocalUsers().find(user => String(user.id) === String(id)) || null;
+}
+
+function ensureLocalAdminUser() {
+  const users = readLocalUsers();
+  if (users.some(user => user.email === "admin@smartmovies.com")) return;
+
+  const password = hashPassword("admin123");
+  users.push({
+    id: "local-admin",
+    first_name: "Admin",
+    last_name: "User",
+    email: "admin@smartmovies.com",
+    contact: "",
+    address: "",
+    city: "",
+    state: "",
+    password_hash: password.hash,
+    password_salt: password.salt,
+    role: "admin",
+    language: "en",
+    profile_photo: ""
+  });
+  writeLocalUsers(users);
+}
+
+async function findUserByEmail(email) {
+  return databaseConnected ? getUserByEmail(email) : getLocalUserByEmail(email);
+}
+
+async function addUser(user) {
+  if (databaseConnected) {
+    return createUser(user);
+  }
+
+  const users = readLocalUsers();
+  const record = {
+    id: `local-${Date.now()}`,
+    first_name: user.firstName,
+    last_name: user.lastName || "",
+    email: String(user.email || "").trim().toLowerCase(),
+    contact: user.contact || "",
+    address: user.address || "",
+    city: user.city || "",
+    state: user.state || "",
+    password_hash: user.passwordHash,
+    password_salt: user.passwordSalt,
+    role: user.role || "user",
+    language: "en",
+    profile_photo: ""
+  };
+
+  users.push(record);
+  writeLocalUsers(users);
+  return record;
+}
+
+async function editUser(id, changes) {
+  if (databaseConnected) {
+    return updateUser(id, changes);
+  }
+
+  const users = readLocalUsers();
+  const index = users.findIndex(user => String(user.id) === String(id));
+  if (index === -1) return null;
+
+  users[index] = {
+    ...users[index],
+    first_name: changes.firstName,
+    last_name: changes.lastName || "",
+    email: String(changes.email || "").trim().toLowerCase(),
+    contact: changes.contact || "",
+    address: changes.address || "",
+    city: changes.city || "",
+    state: changes.state || "",
+    language: changes.language || users[index].language || "en",
+    profile_photo: Object.hasOwn(changes, "photo") ? (changes.photo || "") : (users[index].profile_photo || ""),
+    password_hash: changes.passwordHash || users[index].password_hash,
+    password_salt: changes.passwordSalt || users[index].password_salt
+  };
+
+  writeLocalUsers(users);
+  return users[index];
 }
 
 async function ensureAdminUser() {
@@ -511,14 +622,14 @@ app.post("/api/auth/register", async (req, res) => {
     });
   }
 
-  if (await getUserByEmail(email)) {
+  if (await findUserByEmail(email)) {
     return res.status(409).json({ error: "This email is already registered." });
   }
 
   const password = hashPassword(rawPassword);
 
   try {
-    const user = await createUser({
+    const user = await addUser({
       firstName,
       lastName: String(body.lastName || "").trim(),
       email,
@@ -539,7 +650,7 @@ app.post("/api/auth/register", async (req, res) => {
 app.post("/api/auth/login", async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
-  const user = await getUserByEmail(email);
+  const user = await findUserByEmail(email);
 
   if (!user || !isValidPassword(password, user)) {
     return res.status(401).json({ error: "Invalid email or password." });
@@ -549,9 +660,11 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.put("/api/users/:id", async (req, res) => {
-  const existingUser = await getUserByEmail(String(req.body?.originalEmail || req.body?.email || "").toLowerCase());
+  const existingUser = databaseConnected
+    ? await getUserByEmail(String(req.body?.originalEmail || req.body?.email || "").toLowerCase())
+    : getLocalUserById(req.params.id);
 
-  if (!existingUser || Number(existingUser.id) !== Number(req.params.id)) {
+  if (!existingUser || String(existingUser.id) !== String(req.params.id)) {
     return res.status(404).json({ error: "User not found." });
   }
 
@@ -562,8 +675,8 @@ app.put("/api/users/:id", async (req, res) => {
     return res.status(400).json({ error: "First name and email are required." });
   }
 
-  const duplicate = await getUserByEmail(email);
-  if (duplicate && Number(duplicate.id) !== Number(req.params.id)) {
+  const duplicate = await findUserByEmail(email);
+  if (duplicate && String(duplicate.id) !== String(req.params.id)) {
     return res.status(409).json({ error: "This email is already registered." });
   }
 
@@ -590,7 +703,10 @@ app.put("/api/users/:id", async (req, res) => {
   }
 
   try {
-    const user = await updateUser(req.params.id, changes);
+    const user = await editUser(req.params.id, changes);
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
     res.json({ user: publicUser(user) });
   } catch (error) {
     res.status(500).json({ error: "Could not update the profile." });
@@ -885,6 +1001,7 @@ async function startServer() {
   } catch (error) {
     databaseConnected = false;
     movies = loadLocalMovies();
+    ensureLocalAdminUser();
     console.warn("MySQL is unavailable. Starting with the local movie catalog:", error.message);
   }
 
