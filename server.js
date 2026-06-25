@@ -789,20 +789,26 @@ app.get("/api/database/status", async (req, res) => {
 });
 
 app.get("/api/health", async (req, res) => {
+  const health = {
+    ok: true,
+    database: databaseConnected ? "mysql" : "local-catalog",
+    movies: movies.length,
+    ollama: {
+      connected: false,
+      models: []
+    }
+  };
+
   try {
     const response = await fetch("http://localhost:11434/api/tags");
     const data = await response.json();
-
-    res.json({
-      ok: true,
-      models: data.models || []
-    });
+    health.ollama.connected = response.ok;
+    health.ollama.models = data.models || [];
   } catch (error) {
-    res.status(500).json({
-      ok: false,
-      error: "Ollama is not running."
-    });
+    health.ollama.error = "Ollama is not running.";
   }
+
+  res.json(health);
 });
 
 app.get("/api/trailer", async (req, res) => {
