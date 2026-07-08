@@ -15,6 +15,11 @@ const newMovieBtn = document.getElementById("newMovieBtn");
 const syncMoviesBtn = document.getElementById("syncMoviesBtn");
 const resetFormBtn = document.getElementById("resetFormBtn");
 const adminFeedbackList = document.getElementById("adminFeedbackList");
+const adminFeedbackCount = document.getElementById("adminFeedbackCount");
+const refreshFeedbackBtn = document.getElementById("refreshFeedbackBtn");
+const feedbackReplyTemplate = document.getElementById("feedbackReplyTemplate");
+const adminSectionTabs = document.querySelectorAll(".admin-section-tab");
+const adminPanels = document.querySelectorAll(".admin-panel");
 
 if (localStorage.getItem("smartAdminVerified") !== "true") {
   alert("Please verify admin access first.");
@@ -32,7 +37,17 @@ const fallbackPosters = [
 
 let movies = [];
 let searchText = "";
-let serverMode = location.protocol !== "file:";
+let feedback = [];
+let serverMode = hasServerApi();
+
+function hasServerApi() {
+  const localHosts = ["localhost", "127.0.0.1"];
+  const isStaticPreview =
+    location.protocol === "file:" ||
+    location.hostname.endsWith("github.io") ||
+    (localHosts.includes(location.hostname) && location.port && location.port !== "3000");
+  return !isStaticPreview;
+}
 
 function escapeHtml(value) {
   return String(value || "")
@@ -54,6 +69,10 @@ function saveLocalMovies() {
   localStorage.setItem("adminMovies", JSON.stringify(movies));
 }
 
+function saveLocalFeedback() {
+  localStorage.setItem("adminFeedback", JSON.stringify(feedback));
+}
+
 function loadLocalMovies() {
   const saved = localStorage.getItem("adminMovies");
   if (saved) {
@@ -63,6 +82,39 @@ function loadLocalMovies() {
 
   movies = Array.isArray(window.LOCAL_MOVIES) ? window.LOCAL_MOVIES.slice(0, 120) : [];
   saveLocalMovies();
+}
+
+function loadLocalFeedback() {
+  const saved = localStorage.getItem("adminFeedback");
+  if (saved) {
+    feedback = JSON.parse(saved);
+    return;
+  }
+
+  feedback = [
+    {
+      id: "local-feedback-1",
+      type: "Suggestion",
+      message: "Please add more action movies and make trailer playback easier.",
+      user: "demo.user@example.com",
+      date: new Date().toLocaleString(),
+      reply: "",
+      repliedAt: ""
+    }
+  ];
+  saveLocalFeedback();
+}
+
+function switchAdminSection(section) {
+  adminSectionTabs.forEach(tab => {
+    tab.classList.toggle("active", tab.dataset.adminSection === section);
+  });
+
+  adminPanels.forEach(panel => {
+    const isMovies = section === "movies" && panel.id === "adminMoviesPanel";
+    const isFeedback = section === "feedback" && panel.id === "adminFeedbackPanel";
+    panel.classList.toggle("active", isMovies || isFeedback);
+  });
 }
 
 async function fetchMovies() {
@@ -191,26 +243,84 @@ async function renderAdminFeedback() {
   if (!adminFeedbackList) return;
 
   try {
-    const response = await fetch("/api/admin/feedback");
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not load feedback.");
-    const feedback = data.feedback || [];
+    if (!serverMode) {
+      loadLocalFeedback();
+    } else {
+      const response = await fetch("/api/admin/feedback");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load feedback.");
+      feedback = data.feedback || [];
+    }
 
     if (!feedback.length) {
+      adminFeedbackCount.textContent = "0 feedback";
       adminFeedbackList.innerHTML = `<div class="feedback-empty">No feedback submitted yet.</div>`;
       return;
     }
 
-    adminFeedbackList.innerHTML = feedback.map(item => `
-      <div class="feedback-item">
-        <strong>${escapeHtml(item.type)}</strong>
-        <p>${escapeHtml(item.message)}</p>
-        <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date || "")}</span>
-      </div>
-    `).join("");
+    adminFeedbackCount.textContent = `${feedback.length} feedback`;
+    adminFeedbackList.innerHTML = "";
+
+    feedback.forEach(item => {
+      const node = feedbackReplyTemplate.content.cloneNode(true);
+      const article = node.querySelector(".admin-feedback-item");
+      const state = node.querySelector("[data-feedback-state]");
+      const existingReply = node.querySelector("[data-feedback-existing-reply]");
+      const textarea = node.querySelector("[data-feedback-reply]");
+      const saveButton = node.querySelector("[data-feedback-save]");
+
+      article.dataset.feedbackId = item.id;
+      node.querySelector("[data-feedback-type]").textContent = item.type || "Feedback";
+      node.querySelector("[data-feedback-message]").textContent = item.message || "";
+      node.querySelector("[data-feedback-user]").textContent = `${item.user || "Guest"} - ${item.date || ""}`;
+      state.textContent = item.reply ? "Replied" : "Needs reply";
+      state.className = item.reply ? "feedback-state replied" : "feedback-state pending";
+      textarea.value = item.reply || "";
+      saveButton.dataset.feedbackSave = item.id;
+
+      if (item.reply) {
+        existingReply.innerHTML = `
+          <strong>Current reply</strong>
+          <p>${escapeHtml(item.reply)}</p>
+          <small>${escapeHtml(item.repliedAt || "")}</small>
+        `;
+      } else {
+        existingReply.innerHTML = `<em>No admin reply yet.</em>`;
+      }
+
+      adminFeedbackList.appendChild(node);
+    });
   } catch (error) {
+    adminFeedbackCount.textContent = "Unavailable";
     adminFeedbackList.innerHTML = `<div class="feedback-empty">${escapeHtml(error.message)}</div>`;
   }
+}
+
+async function saveFeedbackReply(id, reply) {
+  if (!serverMode) {
+    const index = feedback.findIndex(item => String(item.id) === String(id));
+    if (index === -1) throw new Error("Feedback not found.");
+    feedback[index] = {
+      ...feedback[index],
+      reply,
+      repliedAt: new Date().toLocaleString()
+    };
+    saveLocalFeedback();
+    return feedback[index];
+  }
+
+  const response = await fetch(`/api/admin/feedback/${encodeURIComponent(id)}/reply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reply })
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not save reply.");
+  }
+
+  return data.feedback;
 }
 
 async function saveMovie(record) {
@@ -334,6 +444,11 @@ adminSearchInput.addEventListener("input", function () {
 });
 
 newMovieBtn.addEventListener("click", resetForm);
+adminSectionTabs.forEach(tab => {
+  tab.addEventListener("click", function () {
+    switchAdminSection(tab.dataset.adminSection);
+  });
+});
 syncMoviesBtn.addEventListener("click", async function () {
   try {
     syncMoviesBtn.disabled = true;
@@ -353,6 +468,32 @@ syncMoviesBtn.addEventListener("click", async function () {
   }
 });
 resetFormBtn.addEventListener("click", resetForm);
+refreshFeedbackBtn.addEventListener("click", renderAdminFeedback);
+adminFeedbackList.addEventListener("click", async function (event) {
+  const button = event.target.closest("[data-feedback-save]");
+  if (!button) return;
+
+  const item = button.closest(".admin-feedback-item");
+  const status = item.querySelector("[data-feedback-status]");
+  const textarea = item.querySelector("[data-feedback-reply]");
+  const reply = textarea.value.trim();
+
+  if (!reply) {
+    status.textContent = "Write a reply first.";
+    return;
+  }
+
+  try {
+    button.disabled = true;
+    status.textContent = "Saving reply...";
+    await saveFeedbackReply(button.dataset.feedbackSave, reply);
+    await renderAdminFeedback();
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 
 fetchMovies();
 renderAdminFeedback();

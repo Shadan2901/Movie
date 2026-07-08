@@ -1093,13 +1093,82 @@ select {
 }
 
 .desc {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #c9c9c9;
+  cursor: pointer;
   font-size: 13px;
   line-height: 1.45;
+  text-align: left;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.desc:hover,
+.desc:focus-visible {
+  color: #fff;
+  outline: none;
+  text-decoration: underline;
+  text-decoration-color: var(--yellow);
+  text-underline-offset: 3px;
+}
+
+.movie-description-popover {
+  position: fixed;
+  z-index: 3400;
+  display: none;
+  max-height: min(360px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid rgba(245, 197, 24, 0.42);
+  border-radius: var(--radius);
+  background: rgba(17, 17, 17, 0.98);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.56);
+}
+
+.movie-description-popover.show {
+  display: block;
+}
+
+.movie-description-popover.pinned {
+  border-color: var(--yellow);
+}
+
+.movie-description-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  width: 30px;
+  height: 30px;
+  margin: -6px -6px 6px 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: #000;
+  cursor: pointer;
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.movie-description-heading {
+  display: block;
+  color: var(--yellow);
+  font-size: 15px;
+  line-height: 1.35;
+  margin-bottom: 10px;
+  padding-right: 36px;
+}
+
+.movie-description-text {
+  color: #f2f2f2;
+  font-size: 14px;
+  line-height: 1.58;
+  white-space: pre-wrap;
 }
 
 .why {
@@ -1415,6 +1484,34 @@ select {
   font-size: 12px;
 }
 
+.feedback-admin-reply {
+  margin-top: 12px;
+  padding: 11px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--yellow);
+  background: #f7f7f7;
+}
+
+.feedback-admin-reply strong {
+  color: #111;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.feedback-admin-reply p {
+  margin-bottom: 4px;
+}
+
+.feedback-admin-reply.pending {
+  border-left-color: #cfcfcf;
+  background: #fafafa;
+}
+
+.feedback-admin-reply.pending p {
+  color: #777;
+  font-style: italic;
+}
+
 .admin-verify-box {
   display: grid;
   gap: 18px;
@@ -1620,14 +1717,29 @@ select {
   margin-bottom: 8px;
 }
 
-.wishlist-page-info p {
+.wishlist-page-desc {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #c9c9c9;
+  cursor: pointer;
   font-size: 13px;
   line-height: 1.45;
+  text-align: left;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.wishlist-page-desc:hover,
+.wishlist-page-desc:focus-visible {
+  color: #fff;
+  outline: none;
+  text-decoration: underline;
+  text-decoration-color: var(--yellow);
+  text-underline-offset: 3px;
 }
 
 .wishlist-page-remove {
@@ -1902,7 +2014,15 @@ select {
   }
 
   .desc {
-    display: none;
+    font-size: 12px;
+    -webkit-line-clamp: 2;
+  }
+
+  .movie-description-popover {
+    left: 12px !important;
+    right: 12px;
+    width: auto !important;
+    max-height: min(420px, calc(100vh - 24px));
   }
 
   .settings-content {

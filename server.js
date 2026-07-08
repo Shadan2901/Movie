@@ -20,6 +20,7 @@ const {
   clearWishlist,
   createFeedback,
   getFeedback,
+  replyToFeedback,
   saveRecommendationHistory,
   getCounts
 } = require("./database");
@@ -767,6 +768,21 @@ app.post("/api/feedback", async (req, res) => {
 
 app.get("/api/admin/feedback", async (req, res) => {
   res.json({ feedback: await getFeedback() });
+});
+
+app.post("/api/admin/feedback/:id/reply", async (req, res) => {
+  const reply = String(req.body?.reply || "").trim();
+
+  if (!reply) {
+    return res.status(400).json({ error: "Reply message is required." });
+  }
+
+  const feedback = await replyToFeedback(req.params.id, reply);
+  if (!feedback) {
+    return res.status(404).json({ error: "Feedback not found." });
+  }
+
+  res.json({ feedback });
 });
 
 app.get("/api/database/status", async (req, res) => {

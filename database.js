@@ -174,6 +174,8 @@ async function createSchema() {
       user_id INT UNSIGNED NULL,
       type VARCHAR(50) NOT NULL,
       message TEXT NOT NULL,
+      reply TEXT NULL,
+      replied_at TIMESTAMP NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_feedback_user (user_id),
       INDEX idx_feedback_created (created_at),
@@ -181,6 +183,8 @@ async function createSchema() {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   `);
+
+  await ensureFeedbackReplyColumns();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS recommendation_history (
@@ -215,6 +219,23 @@ async function createSchema() {
     INSERT IGNORE INTO user_preferences (user_id, language)
     SELECT id, 'en' FROM users
   `);
+}
+
+async function ensureFeedbackReplyColumns() {
+  const [columns] = await pool.query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'feedback'
+  `, [databaseConfig.database]);
+  const existingColumns = new Set(columns.map(column => column.COLUMN_NAME));
+
+  if (!existingColumns.has("reply")) {
+    await pool.query("ALTER TABLE feedback ADD COLUMN reply TEXT NULL AFTER message");
+  }
+
+  if (!existingColumns.has("replied_at")) {
+    await pool.query("ALTER TABLE feedback ADD COLUMN replied_at TIMESTAMP NULL AFTER reply");
+  }
 }
 
 async function importMoviesIfEmpty() {
@@ -644,6 +665,8 @@ async function getFeedback(userId) {
       feedback.id,
       feedback.type,
       feedback.message,
+      feedback.reply,
+      feedback.replied_at,
       feedback.created_at,
       COALESCE(users.email, 'Guest') AS user
     FROM feedback
@@ -657,9 +680,23 @@ async function getFeedback(userId) {
     id: Number(row.id),
     type: row.type,
     message: row.message,
+    reply: row.reply || "",
+    repliedAt: row.replied_at ? new Date(row.replied_at).toLocaleString() : "",
     user: row.user,
     date: new Date(row.created_at).toLocaleString()
   }));
+}
+
+async function replyToFeedback(id, reply) {
+  const [result] = await pool.execute(
+    "UPDATE feedback SET reply = ?, replied_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [String(reply), Number(id)]
+  );
+
+  if (Number(result.affectedRows) === 0) return null;
+
+  const feedback = await getFeedback();
+  return feedback.find(item => Number(item.id) === Number(id)) || null;
 }
 
 async function saveRecommendationHistory({ userId, prompt, reply, recommendations }) {
@@ -737,6 +774,7 @@ module.exports = {
   clearWishlist,
   createFeedback,
   getFeedback,
+  replyToFeedback,
   saveRecommendationHistory,
   getCounts
 };

@@ -3,6 +3,8 @@ const wishlistPageCount = document.getElementById("wishlistPageCount");
 const clearWishlistBtn = document.getElementById("clearWishlistBtn");
 let wishlist = [];
 let currentUser = null;
+let activeWishlistDescriptionTrigger = null;
+let wishlistDescriptionPinned = false;
 
 const posterFallbacks = [
   "images/inception.jpg",
@@ -73,6 +75,75 @@ function saveGuestWishlist() {
   localStorage.setItem("movieWishlist", JSON.stringify(wishlist));
 }
 
+function ensureWishlistDescriptionPopover() {
+  let popover = document.getElementById("movieDescriptionPopover");
+  if (popover) return popover;
+
+  popover = document.createElement("div");
+  popover.id = "movieDescriptionPopover";
+  popover.className = "movie-description-popover";
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-live", "polite");
+  popover.setAttribute("aria-hidden", "true");
+  popover.innerHTML = `
+    <button class="movie-description-close" type="button" aria-label="Close movie description">&times;</button>
+    <strong class="movie-description-heading"></strong>
+    <p class="movie-description-text"></p>
+  `;
+  document.body.appendChild(popover);
+  popover.querySelector(".movie-description-close").addEventListener("click", hideWishlistDescriptionPopover);
+  return popover;
+}
+
+function positionWishlistDescriptionPopover(trigger, popover) {
+  const rect = trigger.getBoundingClientRect();
+  const gap = 12;
+  const width = Math.min(420, window.innerWidth - 24);
+  popover.style.width = `${width}px`;
+
+  const popoverHeight = Math.min(popover.offsetHeight || 260, window.innerHeight - 24);
+  let left = rect.left;
+  let top = rect.bottom + gap;
+
+  if (left + width > window.innerWidth - 12) {
+    left = window.innerWidth - width - 12;
+  }
+
+  if (top + popoverHeight > window.innerHeight - 12) {
+    top = rect.top - popoverHeight - gap;
+  }
+
+  popover.style.left = `${Math.max(12, left)}px`;
+  popover.style.top = `${Math.max(12, top)}px`;
+}
+
+function showWishlistDescriptionPopover(trigger, pinned = false) {
+  const description = trigger.dataset.fullDescription || "";
+  if (!description.trim()) return;
+
+  const popover = ensureWishlistDescriptionPopover();
+  activeWishlistDescriptionTrigger = trigger;
+  wishlistDescriptionPinned = pinned;
+  popover.querySelector(".movie-description-heading").textContent = trigger.dataset.movieTitle || "Movie description";
+  popover.querySelector(".movie-description-text").textContent = description;
+  popover.classList.add("show");
+  popover.classList.toggle("pinned", pinned);
+  popover.setAttribute("aria-hidden", "false");
+  positionWishlistDescriptionPopover(trigger, popover);
+}
+
+function hideWishlistDescriptionPopover(force = false) {
+  if (wishlistDescriptionPinned && !force) return;
+
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (!popover) return;
+
+  popover.classList.remove("show", "pinned");
+  popover.setAttribute("aria-hidden", "true");
+  activeWishlistDescriptionTrigger = null;
+  wishlistDescriptionPinned = false;
+}
+
 function renderWishlistPage() {
   wishlistPageCount.textContent = `${wishlist.length} saved`;
   clearWishlistBtn.disabled = wishlist.length === 0;
@@ -97,6 +168,7 @@ function renderWishlistPage() {
     const trailerId = escapeHtml(movie.id || "");
     const trailerTitle = escapeHtml(movie.title || "Movie");
     const trailerYear = escapeHtml(movie.year || "");
+    const description = escapeHtml(movie.description || "No description available.");
 
     return `
       <article class="wishlist-page-card">
@@ -111,7 +183,13 @@ function renderWishlistPage() {
             <span>Rating ${escapeHtml(movie.rating || "N/A")}/10</span>
           </div>
           <h2>${title}</h2>
-          <p>${escapeHtml(movie.description || "No description available.")}</p>
+          <button
+            class="wishlist-page-desc"
+            type="button"
+            data-movie-title="${title}"
+            data-full-description="${description}"
+            aria-label="Show full description for ${title || "this movie"}"
+          >${description}</button>
           <button class="wishlist-page-remove" type="button" data-remove-key="${key}">Remove</button>
         </div>
       </article>
@@ -120,6 +198,12 @@ function renderWishlistPage() {
 }
 
 wishlistPageGrid.addEventListener("click", async function (event) {
+  const descriptionButton = event.target.closest(".wishlist-page-desc");
+  if (descriptionButton) {
+    showWishlistDescriptionPopover(descriptionButton, true);
+    return;
+  }
+
   const button = event.target.closest("[data-remove-key]");
   if (!button) return;
 
@@ -141,6 +225,62 @@ wishlistPageGrid.addEventListener("click", async function (event) {
   wishlist = wishlist.filter(item => getMovieKey(item) !== key);
   if (!currentUser?.id) saveGuestWishlist();
   renderWishlistPage();
+});
+
+wishlistPageGrid.addEventListener("mouseover", function (event) {
+  const descriptionButton = event.target.closest(".wishlist-page-desc");
+  if (descriptionButton) showWishlistDescriptionPopover(descriptionButton);
+});
+
+wishlistPageGrid.addEventListener("focusin", function (event) {
+  const descriptionButton = event.target.closest(".wishlist-page-desc");
+  if (descriptionButton) showWishlistDescriptionPopover(descriptionButton);
+});
+
+wishlistPageGrid.addEventListener("mouseout", function (event) {
+  const descriptionButton = event.target.closest(".wishlist-page-desc");
+  if (!descriptionButton || descriptionButton.contains(event.relatedTarget)) return;
+  hideWishlistDescriptionPopover();
+});
+
+wishlistPageGrid.addEventListener("focusout", function (event) {
+  const descriptionButton = event.target.closest(".wishlist-page-desc");
+  if (!descriptionButton) return;
+  window.setTimeout(() => {
+    const popover = document.getElementById("movieDescriptionPopover");
+    if (!popover?.contains(document.activeElement)) hideWishlistDescriptionPopover();
+  }, 0);
+});
+
+document.addEventListener("click", function (event) {
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (
+    !popover ||
+    event.target.closest(".wishlist-page-desc") ||
+    popover.contains(event.target)
+  ) return;
+
+  hideWishlistDescriptionPopover(true);
+});
+
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape") hideWishlistDescriptionPopover(true);
+});
+
+window.addEventListener("scroll", function () {
+  if (!activeWishlistDescriptionTrigger) return;
+
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (!popover?.classList.contains("show")) return;
+  positionWishlistDescriptionPopover(activeWishlistDescriptionTrigger, popover);
+}, { passive: true });
+
+window.addEventListener("resize", function () {
+  if (!activeWishlistDescriptionTrigger) return;
+
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (!popover?.classList.contains("show")) return;
+  positionWishlistDescriptionPopover(activeWishlistDescriptionTrigger, popover);
 });
 
 clearWishlistBtn.addEventListener("click", async function () {

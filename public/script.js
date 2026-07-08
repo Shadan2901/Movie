@@ -66,6 +66,8 @@ let totalPagesGlobal = 1;
 let aiBusy = false;
 let wishlist = [];
 let assistantConversation = [];
+let activeDescriptionTrigger = null;
+let descriptionPinned = false;
 const limit = 15;
 const localMovies = Array.isArray(window.LOCAL_MOVIES) ? window.LOCAL_MOVIES : [];
 const genreNames = {
@@ -240,13 +242,31 @@ async function renderFeedbackList() {
       return;
     }
 
-    feedbackList.innerHTML = feedback.slice(0, 4).map(item => `
-      <div class="feedback-item">
-        <strong>${escapeHtml(item.type)}</strong>
-        <p>${escapeHtml(item.message)}</p>
-        <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date)}</span>
-      </div>
-    `).join("");
+    feedbackList.innerHTML = feedback.slice(0, 4).map(item => {
+      const adminReply = item.reply
+        ? `
+          <div class="feedback-admin-reply replied">
+            <strong>Admin reply</strong>
+            <p>${escapeHtml(item.reply)}</p>
+            ${item.repliedAt ? `<span>${escapeHtml(item.repliedAt)}</span>` : ""}
+          </div>
+        `
+        : `
+          <div class="feedback-admin-reply pending">
+            <strong>Admin reply</strong>
+            <p>Waiting for admin reply.</p>
+          </div>
+        `;
+
+      return `
+        <div class="feedback-item">
+          <strong>${escapeHtml(item.type)}</strong>
+          <p>${escapeHtml(item.message)}</p>
+          <span>${escapeHtml(item.user || "Guest")} - ${escapeHtml(item.date)}</span>
+          ${adminReply}
+        </div>
+      `;
+    }).join("");
   } catch (error) {
     feedbackList.innerHTML = `<div class="feedback-empty">${escapeHtml(error.message)}</div>`;
   }
@@ -298,6 +318,75 @@ function closeProfileEditor() {
   profileModal.classList.remove("show");
 }
 
+function ensureDescriptionPopover() {
+  let popover = document.getElementById("movieDescriptionPopover");
+  if (popover) return popover;
+
+  popover = document.createElement("div");
+  popover.id = "movieDescriptionPopover";
+  popover.className = "movie-description-popover";
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-live", "polite");
+  popover.setAttribute("aria-hidden", "true");
+  popover.innerHTML = `
+    <button class="movie-description-close" type="button" aria-label="Close movie description">&times;</button>
+    <strong class="movie-description-heading"></strong>
+    <p class="movie-description-text"></p>
+  `;
+  document.body.appendChild(popover);
+  popover.querySelector(".movie-description-close").addEventListener("click", hideDescriptionPopover);
+  return popover;
+}
+
+function positionDescriptionPopover(trigger, popover) {
+  const rect = trigger.getBoundingClientRect();
+  const gap = 12;
+  const width = Math.min(420, window.innerWidth - 24);
+  popover.style.width = `${width}px`;
+
+  const popoverHeight = Math.min(popover.offsetHeight || 260, window.innerHeight - 24);
+  let left = rect.left;
+  let top = rect.bottom + gap;
+
+  if (left + width > window.innerWidth - 12) {
+    left = window.innerWidth - width - 12;
+  }
+
+  if (top + popoverHeight > window.innerHeight - 12) {
+    top = rect.top - popoverHeight - gap;
+  }
+
+  popover.style.left = `${Math.max(12, left)}px`;
+  popover.style.top = `${Math.max(12, top)}px`;
+}
+
+function showDescriptionPopover(trigger, pinned = false) {
+  const description = trigger.dataset.fullDescription || "";
+  if (!description.trim()) return;
+
+  const popover = ensureDescriptionPopover();
+  activeDescriptionTrigger = trigger;
+  descriptionPinned = pinned;
+  popover.querySelector(".movie-description-heading").textContent = trigger.dataset.movieTitle || "Movie description";
+  popover.querySelector(".movie-description-text").textContent = description;
+  popover.classList.add("show");
+  popover.classList.toggle("pinned", pinned);
+  popover.setAttribute("aria-hidden", "false");
+  positionDescriptionPopover(trigger, popover);
+}
+
+function hideDescriptionPopover(force = false) {
+  if (descriptionPinned && !force) return;
+
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (!popover) return;
+
+  popover.classList.remove("show", "pinned");
+  popover.setAttribute("aria-hidden", "true");
+  activeDescriptionTrigger = null;
+  descriptionPinned = false;
+}
+
 burgerBtn.addEventListener("click", function () {
   navMenu.classList.toggle("show");
 });
@@ -318,6 +407,12 @@ loginBtn.addEventListener("click", function () {
 });
 
 logoutBtn.addEventListener("click", function () {
+  const firstConfirm = window.confirm("Are you sure you want to log out?");
+  if (!firstConfirm) return;
+
+  const secondConfirm = window.confirm("Please confirm again. Log out from Smart Movies now?");
+  if (!secondConfirm) return;
+
   addMessage(`User <b>${getDisplayName()}</b> has logged out.`, "bot");
   currentUser = null;
   localStorage.removeItem("smartCurrentUser");
@@ -663,7 +758,13 @@ function renderMovies(items) {
             <div class="rating">Rating ${escapeHtml(item.rating || "N/A")}/10</div>
             ${item.year ? `<div class="year-pill">${escapeHtml(item.year)}</div>` : ""}
           </div>
-          <div class="desc">${escapeHtml(item.description)}</div>
+          <button
+            class="desc"
+            type="button"
+            data-movie-title="${title}"
+            data-full-description="${escapeHtml(item.description || "No description available.")}"
+            aria-label="Show full description for ${title || "this movie"}"
+          >${escapeHtml(item.description || "No description available.")}</button>
           ${item.why ? `<div class="why">${escapeHtml(item.why)}</div>` : ""}
         </div>
       </div>
@@ -932,6 +1033,12 @@ resetFiltersBtn.addEventListener("click", function () {
 });
 
 movieGrid.addEventListener("click", async function (event) {
+  const descriptionButton = event.target.closest(".desc");
+  if (descriptionButton) {
+    showDescriptionPopover(descriptionButton, true);
+    return;
+  }
+
   const button = event.target.closest(".watch-flag");
   if (!button) return;
 
@@ -941,6 +1048,62 @@ movieGrid.addEventListener("click", async function (event) {
   } catch (error) {
     addMessage("Could not update wishlist for this movie.", "bot");
   }
+});
+
+movieGrid.addEventListener("mouseover", function (event) {
+  const descriptionButton = event.target.closest(".desc");
+  if (descriptionButton) showDescriptionPopover(descriptionButton);
+});
+
+movieGrid.addEventListener("focusin", function (event) {
+  const descriptionButton = event.target.closest(".desc");
+  if (descriptionButton) showDescriptionPopover(descriptionButton);
+});
+
+movieGrid.addEventListener("mouseout", function (event) {
+  const descriptionButton = event.target.closest(".desc");
+  if (!descriptionButton || descriptionButton.contains(event.relatedTarget)) return;
+  hideDescriptionPopover();
+});
+
+movieGrid.addEventListener("focusout", function (event) {
+  const descriptionButton = event.target.closest(".desc");
+  if (!descriptionButton) return;
+  window.setTimeout(() => {
+    const popover = document.getElementById("movieDescriptionPopover");
+    if (!popover?.contains(document.activeElement)) hideDescriptionPopover();
+  }, 0);
+});
+
+document.addEventListener("click", function (event) {
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (
+    !popover ||
+    event.target.closest(".desc") ||
+    popover.contains(event.target)
+  ) return;
+
+  hideDescriptionPopover(true);
+});
+
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape") hideDescriptionPopover(true);
+});
+
+window.addEventListener("scroll", function () {
+  if (!activeDescriptionTrigger) return;
+
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (!popover?.classList.contains("show")) return;
+  positionDescriptionPopover(activeDescriptionTrigger, popover);
+}, { passive: true });
+
+window.addEventListener("resize", function () {
+  if (!activeDescriptionTrigger) return;
+
+  const popover = document.getElementById("movieDescriptionPopover");
+  if (!popover?.classList.contains("show")) return;
+  positionDescriptionPopover(activeDescriptionTrigger, popover);
 });
 
 wishlistList.addEventListener("click", async function (event) {
