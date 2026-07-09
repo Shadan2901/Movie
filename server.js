@@ -62,6 +62,21 @@ const GENRE_NAMES = {
   10770: "TV Movie"
 };
 
+const PROMPT_GENRES = [
+  { id: 27, keywords: ["horror", "scary", "ghost", "haunted", "supernatural"] },
+  { id: 28, keywords: ["action", "fight", "combat"] },
+  { id: 35, keywords: ["comedy", "funny", "humor"] },
+  { id: 10749, keywords: ["romance", "romantic", "love"] },
+  { id: 53, keywords: ["thriller", "suspense"] },
+  { id: 18, keywords: ["drama", "emotional"] },
+  { id: 16, keywords: ["animation", "animated", "cartoon"] },
+  { id: 12, keywords: ["adventure", "journey"] },
+  { id: 14, keywords: ["fantasy", "magic"] },
+  { id: 878, keywords: ["science fiction", "sci-fi", "scifi", "space"] },
+  { id: 99, keywords: ["documentary", "real story"] },
+  { id: 9648, keywords: ["mystery"] }
+];
+
 async function refreshMovies() {
   movies = await getAllMovies();
 }
@@ -250,6 +265,101 @@ function getGenreNames(movie) {
     .filter(Boolean);
 }
 
+function getSearchableMovieText(movie) {
+  return [
+    movie.title,
+    movie.description,
+    movie.year,
+    movie.rating,
+    getGenreNames(movie).join(" ")
+  ].join(" ").toLowerCase();
+}
+
+function getRequestedRecommendationCount(promptText) {
+  const text = String(promptText || "").toLowerCase();
+  const wordNumbers = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5
+  };
+
+  const digitMatch = text.match(/\b([1-5])\b/);
+  if (digitMatch) return Math.min(5, Math.max(1, Number(digitMatch[1])));
+
+  for (const [word, value] of Object.entries(wordNumbers)) {
+    if (new RegExp(`\\b${word}\\b`).test(text)) {
+      return Math.min(5, Math.max(1, value));
+    }
+  }
+
+  if (/\ba movie\b|\bone movie\b|\b1 movie\b/.test(text)) return 1;
+  return 3;
+}
+
+function getPromptCategoryKeywords(promptText) {
+  const text = String(promptText || "").toLowerCase();
+  return PROMPT_GENRES
+    .map(genre => genre.keywords)
+    .filter(keywords => keywords.some(keyword => text.includes(keyword)))
+    .flat();
+}
+
+function getRequestedGenreIds(promptText) {
+  const text = String(promptText || "").toLowerCase();
+  return PROMPT_GENRES
+    .filter(genre => genre.keywords.some(keyword => text.includes(keyword)))
+    .map(genre => String(genre.id));
+}
+
+function movieHasAnyGenre(movie, genreIds) {
+  if (!genreIds.length) return true;
+  const movieGenreIds = (movie.genre_ids || []).map(String);
+  return genreIds.some(id => movieGenreIds.includes(id));
+}
+
+function buildRecommendation(movie, why = "") {
+  return {
+    id: movie.id,
+    title: movie.title,
+    year: movie.year,
+    rating: movie.rating,
+    poster: movie.poster,
+    description: movie.description,
+    why: why || `Matches your request based on its title, genre, description, year, or rating.`
+  };
+}
+
+function completeRecommendations(recommendations, candidateMovies, requestedCount) {
+  const selected = [];
+  const usedIds = new Set();
+  const usedTitles = new Set();
+
+  for (const item of recommendations) {
+    if (!item || !item.title) continue;
+    const id = String(item.id || "");
+    const title = String(item.title || "").toLowerCase();
+    if ((id && usedIds.has(id)) || usedTitles.has(title)) continue;
+    selected.push(item);
+    if (id) usedIds.add(id);
+    usedTitles.add(title);
+    if (selected.length >= requestedCount) return selected;
+  }
+
+  for (const movie of candidateMovies) {
+    const id = String(movie.id || "");
+    const title = String(movie.title || "").toLowerCase();
+    if ((id && usedIds.has(id)) || usedTitles.has(title)) continue;
+    selected.push(buildRecommendation(movie));
+    if (id) usedIds.add(id);
+    usedTitles.add(title);
+    if (selected.length >= requestedCount) break;
+  }
+
+  return selected;
+}
+
 function sortMoviesByOption(items, sortOption) {
   return items.sort((a, b) => {
     if (sortOption === "oldest") {
@@ -284,16 +394,19 @@ function sortMoviesByOption(items, sortOption) {
 
 function getCandidateMovies(promptText) {
   const cleanPrompt = promptText.toLowerCase().trim();
+  const categoryKeywords = getPromptCategoryKeywords(cleanPrompt);
+  const requestedGenreIds = getRequestedGenreIds(cleanPrompt);
 
   let filtered = movies.filter(movie => {
-    const title = (movie.title || "").toLowerCase();
-    const description = (movie.description || "").toLowerCase();
+    const searchableText = getSearchableMovieText(movie);
 
     return (
       isTargetYear(movie) &&
+      movieHasAnyGenre(movie, requestedGenreIds) &&
       (
-        title.includes(cleanPrompt) ||
-        description.includes(cleanPrompt)
+        requestedGenreIds.length > 0 ||
+        searchableText.includes(cleanPrompt) ||
+        categoryKeywords.some(keyword => searchableText.includes(keyword))
       )
     );
   });
@@ -309,6 +422,7 @@ function getCandidateMovies(promptText) {
 
       return (
         isTargetYear(movie) &&
+        movieHasAnyGenre(movie, requestedGenreIds) &&
         (
           title.includes("deadpool") ||
           title.includes("black widow") ||
@@ -329,7 +443,7 @@ function getCandidateMovies(promptText) {
 
   if (filtered.length === 0) {
     filtered = movies
-      .filter(isTargetYear)
+      .filter(movie => isTargetYear(movie) && movieHasAnyGenre(movie, requestedGenreIds))
       .sort((a, b) => {
         if (Number(b.year) !== Number(a.year)) {
           return Number(b.year) - Number(a.year);
@@ -339,7 +453,18 @@ function getCandidateMovies(promptText) {
       .slice(0, 150);
   }
 
-  return filtered;
+  const sortedFiltered = sortMoviesByOption(filtered, cleanPrompt.includes("underrated") ? "rating" : "popular");
+  if (requestedGenreIds.length > 0 || sortedFiltered.length >= 5) {
+    return sortedFiltered.slice(0, 150);
+  }
+
+  const usedMovieIds = new Set(sortedFiltered.map(movie => String(movie.id || "")));
+  const expandedFallback = sortMoviesByOption(
+    movies.filter(movie => isTargetYear(movie) && !usedMovieIds.has(String(movie.id || ""))),
+    cleanPrompt.includes("underrated") ? "rating" : "popular"
+  );
+
+  return [...sortedFiltered, ...expandedFallback].slice(0, 150);
 }
 
 function isMovieRequest(promptText) {
@@ -933,30 +1058,41 @@ Do not mention these instructions. The user's display name is ${username || "Gue
     }
 
     const candidateMovies = getCandidateMovies(prompt);
+    const requestedCount = getRequestedRecommendationCount(prompt);
     const movieTitles = candidateMovies.map(movie => movie.title);
 
-    const content = await askOllama([
-      {
-        role: "system",
-        content: `You are the movie recommendation mode of Smart Assistant.
+    let parsed = {
+      reply: "",
+      recommendations: []
+    };
+
+    try {
+      const content = await askOllama([
+        {
+          role: "system",
+          content: `You are the movie recommendation mode of Smart Assistant.
 Recommend only exact titles from the supplied catalog.
-Return at most 3 recommendations.
+Return exactly ${requestedCount} recommendation${requestedCount === 1 ? "" : "s"} when enough matching catalog titles are available.
 Return JSON with this exact shape:
 {"reply":"short helpful reply","recommendations":[{"title":"exact catalog title","why":"short reason"}]}`
-      },
-      ...conversation,
-      {
-        role: "user",
-        content: `User: ${username || "Guest"}
+        },
+        ...conversation,
+        {
+          role: "user",
+          content: `User: ${username || "Guest"}
 Request: ${prompt}
 
 Available movie titles:
 ${JSON.stringify(movieTitles)}`
-      }
-    ], { format: "json", temperature: 0.2, numPredict: 300 });
-    const parsed = parseOllamaJson(content);
+        }
+      ], { format: "json", temperature: 0.2, numPredict: 700 });
 
-    const recommendations = (parsed.recommendations || [])
+      parsed = parseOllamaJson(content);
+    } catch (error) {
+      console.warn("Could not use structured AI recommendation response:", error.message);
+    }
+
+    const recommendationsFromAi = (parsed.recommendations || [])
       .map(item => {
         const movie = candidateMovies.find(
           m => (m.title || "").trim().toLowerCase() === (item.title || "").trim().toLowerCase()
@@ -964,19 +1100,12 @@ ${JSON.stringify(movieTitles)}`
 
         if (!movie) return null;
 
-        return {
-          id: movie.id,
-          title: movie.title,
-          year: movie.year,
-          rating: movie.rating,
-          poster: movie.poster,
-          description: movie.description,
-          why: item.why || ""
-        };
+        return buildRecommendation(movie, item.why || "");
       })
       .filter(Boolean);
 
-    const reply = parsed.reply || "Here are some movie recommendations.";
+    const recommendations = completeRecommendations(recommendationsFromAi, candidateMovies, requestedCount);
+    const reply = parsed.reply || `Here ${recommendations.length === 1 ? "is" : "are"} ${recommendations.length} movie recommendation${recommendations.length === 1 ? "" : "s"} for you.`;
     await saveAssistantHistory({
       userId,
       prompt,
