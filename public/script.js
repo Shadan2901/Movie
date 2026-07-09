@@ -123,6 +123,37 @@ function addMessage(text, sender) {
   return msg;
 }
 
+function addRecommendationMessage(items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+
+  const cards = items.map((item, index) => {
+    const title = escapeHtml(item.title || "Untitled movie");
+    const poster = escapeHtml(getPoster(item, index));
+    const fallback = escapeHtml(posterFallbacks[index % posterFallbacks.length]);
+    const year = escapeHtml(item.year || "N/A");
+    const rating = escapeHtml(item.rating || "N/A");
+    const why = escapeHtml(item.why || "Recommended from the movie catalog.");
+    const trailerUrl = escapeHtml(getTrailerUrl(item));
+    const trailerId = escapeHtml(item.id || "");
+    const trailerTitle = escapeHtml(item.title || "Movie");
+    const trailerYear = escapeHtml(item.year || "");
+
+    return `
+      <a class="chat-recommendation-card" href="${trailerUrl}" data-trailer-id="${trailerId}" data-trailer-title="${trailerTitle}" data-trailer-year="${trailerYear}">
+        <img src="${poster}" alt="${title}" onerror="this.onerror=null; this.src='${fallback}';">
+        <span>
+          <strong>${title}</strong>
+          <small>${year} · Rating ${rating}/10</small>
+          <em>${why}</em>
+        </span>
+      </a>
+    `;
+  }).join("");
+
+  const message = addMessage(`<div class="chat-recommendations">${cards}</div>`, "bot");
+  message.classList.add("recommendations");
+}
+
 function setAssistantOpen(isOpen, focusInput = false) {
   aiAssistantPanel.classList.toggle("show", isOpen);
   aiAssistantPanel.setAttribute("aria-hidden", String(!isOpen));
@@ -924,6 +955,7 @@ async function askAI(sourceInput = input) {
     addMessage(escapeHtml(reply).replace(/\n/g, "<br>"), "bot");
 
     if (data.recommendations && data.recommendations.length > 0) {
+      addRecommendationMessage(data.recommendations);
       renderMovies(data.recommendations);
       pagination.innerHTML = "";
     } else if (data.mode === "movies") {

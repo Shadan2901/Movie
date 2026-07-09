@@ -871,6 +871,76 @@ select {
   font-weight: 800;
 }
 
+.message.recommendations {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+.chat-recommendations {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-recommendation-card {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid rgba(255, 204, 20, 0.28);
+  border-radius: var(--radius);
+  background: #202020;
+  color: #fff;
+  text-decoration: none;
+}
+
+.chat-recommendation-card:hover,
+.chat-recommendation-card:focus-visible {
+  border-color: var(--yellow);
+  background: #282828;
+}
+
+.chat-recommendation-card img {
+  width: 58px;
+  height: 86px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #111;
+}
+
+.chat-recommendation-card span {
+  min-width: 0;
+}
+
+.chat-recommendation-card strong,
+.chat-recommendation-card small,
+.chat-recommendation-card em {
+  display: block;
+}
+
+.chat-recommendation-card strong {
+  margin-bottom: 4px;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.chat-recommendation-card small {
+  margin-bottom: 5px;
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chat-recommendation-card em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
 .movie-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
